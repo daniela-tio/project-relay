@@ -24,3 +24,8 @@ One entry per working session. Keep it short: what happened, what worked, what d
 **Done:** Added working agreement (board policies, Definitions of Ready and Done), PR template and Chore issue template. Created v0.1.0 foundations backlog, 3 chores and 7 stories with acceptance criteria. 
 **Decided:** acceptance criteria for the initial backlog items. UMLs, use case and diagrams are TBC. Demo data will be created and used until app is ready to go into production
 **Reflection:** continueing discussions with internal development team to create working agreements and complete the setup of the repo, including initial backlog items proved very helpful. 
+
+## 21-22 Oct · Initial backlog setup · Dan A
+**Done:** Created issues for initial set of chores and user stories to populate the backlog. Created use case document and linked each issue to its related use case. 
+**Decided:** Architecture will be modular monolith, split into Django apps. Account lockout will be 15 minutes and IP block
+**Reflection:** after investigating splitting the services up and identifying the costs involved meant a modular monolith made sense for the current scale of the app but will allow for separation at a later date

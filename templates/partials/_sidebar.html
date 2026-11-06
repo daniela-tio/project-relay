@@ -1,0 +1,35 @@
+<aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+    <div class="container-fluid">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu"
+                aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggle-icon"></span>
+        </button>
+        <a href="{% url 'home' %}" class="navbar-brand">Project Relay</a>
+
+        <div class="collapse navbar-collapse" id="sidebar-menu">
+            <ul class="navbar-nav pt-lg-3">
+                <li class="nav-item {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
+                    <a class="nav-link" href="{% url 'home' %}"><span class="nav-link-title">Home</span></a>
+                </li>
+
+                {% if user.can_manage_users %}
+                <li class="nav-item mt-3">
+                    <span class="nav-link disabled text-uppercase small">Administration</span>
+                </li>
+                <li class="nav-item">
+                    <span class="nav-link disabled" aria-disabled="true">Users (coming soon)</span>
+                </li>
+                <li class="nav-item">
+                    <span class="nav-link disabled" aria-disabled="true">System log (coming soon)</span>
+                </li>
+                {% endif %}
+            </ul>
+
+            <div class="mt-auto p-3 small text-white-50">
+                {{ user.get_full_name|default:user.username }}<br>{{ user.get_role_display }}
+                <button type="button" class="btn btn-outline-light btn-sm w-100 mt-2" data-bs-toggle="modal" 
+                    data-bs-target="#sign-out-modal">Sign out</button>
+            </div>
+        </div>
+    </div>
+</aside>

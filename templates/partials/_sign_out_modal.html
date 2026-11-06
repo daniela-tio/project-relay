@@ -1,0 +1,17 @@
+<div class="modal modal-blur fade" id="sign-out-modal" tabindex="-1" aria-lableledby="sign-out-title" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body">
+                <h3 class="modal-title" id="sign-out-title">Sign out?</h3>
+                <p class="text-secondary mb-0">You'll need to sign in again to use Project Relay.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="{% url 'signout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary">Sign out</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

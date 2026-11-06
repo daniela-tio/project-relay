@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 from pathlib import Path
+from django.contrib.messages import constants as message_constants
 import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -68,7 +69,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / "templates"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -110,6 +111,8 @@ AUTH_USER_MODEL = "accounts.User"
 LOGIN_URL = "sign_in"
 LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "sign_in"
+
+MESSAGE_TAGS = {message_constants.ERROR: "danger"}
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/

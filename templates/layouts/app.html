@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="page">
+    {% include "partials/_sidebar.html" %}
+    <div class="page-wrapper">
+        <div class="page-header d-print-none">
+            <div class="container-xl">
+                <h2 class="page-title">{% block page_title %}{% endblock %}</h2>
+            </div>
+        </div>
+        <div class="page-body">
+            <div class="container-xl">
+                {% include "partials/_messages.html" %}
+                {% block page_title %}{% endblock %}
+            </div>
+        </div>
+    </div>
+</div>
+{% include "paritals/_sign_out_modal.html" %}
+{% endblock %}

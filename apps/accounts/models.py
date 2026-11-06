@@ -16,7 +16,7 @@ class User(AbstractUser):
     # Role checks
     @property
     def is_administrator(self):
-        return self.is_superuser or self.role == self.ADMINISTRATOR
+        return self.is_superuser or self.role == self.Role.ADMINISTRATOR
     
     @property
     def is_project_manager(self):

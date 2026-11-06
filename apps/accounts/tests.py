@@ -64,7 +64,7 @@ class RoleRuleTests(TestCase):
             user = User(username=role, role=role)
             for rule, allowed in rules.items():
                 with self.subTest(role=role, rule=rule):
-                    self.assertEqual(getattr(user, role), allowed)
+                    self.assertEqual(getattr(user, rule), allowed)
     
     def test_superuser_counts_as_administrator(self):
         user = get_user_model()(username="su", is_superuser=True)

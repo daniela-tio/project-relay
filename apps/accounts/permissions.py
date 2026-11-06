@@ -1,7 +1,7 @@
 from functools import wraps
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionsDenied
+from django.core.exceptions import PermissionDenied
 
 def rule_required(rule):
     """Decorator for function based views. 
@@ -14,7 +14,7 @@ def rule_required(rule):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
             if not getattr(request.user, rule, False):
-                raise PermissionsDenied
+                raise PermissionDenied
             return view_func(request, *args, **kwargs)
         
         return wrapper
@@ -30,5 +30,5 @@ class RuleRequiredMixin(LoginRequiredMixin):
         if not request.user.is_authenticated:
             return self.handle_no_permissions() # Redirects to sign in
         if not getattr(request.user, self.permission_rule, False):
-            raise PermissionsDenied
+            raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)

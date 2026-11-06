@@ -35,3 +35,15 @@ One entry per working session. Keep it short: what happened, what worked, what d
 **Done:** Created issues for initial set of chores and user stories to populate the backlog. Created use case document and linked each issue to its related use case. 
 **Decided:** Architecture will be modular monolith, split into Django apps. Account lockout will be 15 minutes per username and IP.
 **Reflection:** After investigating splitting the services up and identifying the costs involved meant a modular monolith made sense for the current scale of the app but will allow for separation at a later date.
+
+## 26 Oct 2026 · Setup CI Pipeline · Dan A
+
+**Done:** Completed and closed issue #3. Setup GitHub actions to run Django checks, migrations checks and tests on every PR and push to main against its own temp PostgrSQL.
+**Decided:** "CI Passes" is now enforced by GitHub rather than just as a definition of done. CI never touches the live database. Also unreleated to the commit, it was decided that system logs should be stored off site.
+**Reflection:** Enforcing the check makes sure the definition of done is actually followed as no other reviewer available and using a temp database and secret keeps the CI away from the live enviroment.
+
+## 06 Nov 2026 · Setup Database Health Check · Dan A
+
+**Done:** Completed and closed issue #12. Setup /health/ to return OK or 503 if the the database is not reachable. Created tests to run in CI and are required in the ruleset before merging.
+**Worked / didn't:** Tests initially didnt run because apps/ was missing init.py, this was fixed and tests committed.
+**Reflection:** 0 tests still looks like a pass so needed to be checked and trusting a green result is not always the best option.

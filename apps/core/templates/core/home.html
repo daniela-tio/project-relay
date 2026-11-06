@@ -9,7 +9,9 @@
     {% for message in messages %}
     <p>{{ message }}</p>
     {% endfor %}
-    <p>Signed in as {{ user.get_full_name|default:user.username }}.</p>
+    <p>
+      Signed in as {{ user.get_full_name|default:user.username }} ({{ user.get_role_display }}).
+    </p>
     <form method="post" action="{% url 'sign_out' %}">
       {% csrf_token %}
       <button type="submit">Sign out</button>

@@ -105,7 +105,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Authentication
 AUTH_USER_MODEL = "accounts.User"
+LOGIN_URL = "sign_in"
+LOGIN_REDIRECT_URL = "home"
+LOGOUT_REDIRECT_URL = "sign_in"
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/

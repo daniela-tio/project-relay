@@ -1,20 +1,15 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Home · Project Relay</title>
-  </head>
-  <body>
-    {% for message in messages %}
-    <p>{{ message }}</p>
-    {% endfor %}
-    <p>
-      Signed in as {{ user.get_full_name|default:user.username }} ({{ user.get_role_display }}).
+{% extends 'layouts/app.html' %}
+
+{% block title %}Home{% endblock %}
+#{% block page_title %}Home{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <p class="mb-0">
+      Welcome, {{ user.get_full_name|default:user.username }}. You are signed in as a {{ user.get_role_display }}.
+      Your Dashboard will appear here once it's been built.
     </p>
-    <form method="post" action="{% url 'sign_out' %}">
-      {% csrf_token %}
-      <button type="submit">Sign out</button>
-    </form>
-  </body>
-</html>
+  </div>
+</div>
+{% endblock %}

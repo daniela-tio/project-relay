@@ -79,7 +79,7 @@ class UserSetPasswordView(RuleRequiredMixin, FormView):
     
     def form_valid(self, form):
         form.save()
-        messages.success(self.request, f"Passowrd updated for {form.user.username}.")
+        messages.success(self.request, f"Password updated for {form.user.username}.")
         return super().form_valid(form)
     
 class UserDeleteView(RuleRequiredMixin, DeleteView):
@@ -93,7 +93,7 @@ class UserDeleteView(RuleRequiredMixin, DeleteView):
     
     def form_valid(self, form):
         if self.object == self.request.user:
-            message.error(self.request, "You cannot delete your own account.")
+            messages.error(self.request, "You cannot delete your own account.")
             return redirect("user_list")
         if self.object.is_administrator and is_last_active_admin(self.object):
             messages.error(self.request, "The only active administrator cannot be deleted.")

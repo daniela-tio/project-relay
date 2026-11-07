@@ -2,10 +2,13 @@ from django.contrib import messages
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.messages.views import SuccessMessageMixin
 
+from . import SignInForm
+
 class SignInView(SuccessMessageMixin, LoginView):
     """Sign-in page. Will show success message once signed in"""
     
     template_name = "accounts/sign_in.html"
+    authentication_form = SignInForm
     success_message = "Signed in successfully."
     
 class SignOutView(LogoutView):

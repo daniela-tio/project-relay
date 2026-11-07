@@ -13,6 +13,10 @@ class User(AbstractUser):
         max_length = 10, choices = Role.choices, default = Role.TECHNICIAN
     )
     
+    def save(self, *args, **kwargs):
+        self.username = self.username.lower()
+        super().save(*args, **kwargs)
+    
     # Role checks
     @property
     def is_administrator(self):

@@ -3,7 +3,7 @@ from django.db import models
 
 class User(AbstractUser):
     """Project Relay users have one of three roles"""
-    
+      
     class Role(models.TextChoices):
         ADMINISTRATOR = "admin", "Administrator"
         PROJECT_MANAGER = "pm", "Project Manager"
@@ -13,10 +13,19 @@ class User(AbstractUser):
         max_length = 10, choices = Role.choices, default = Role.TECHNICIAN
     )
     
+    email = models.EmailField(
+        unique=True,
+        error_messages={"unique": "A user with this email address already exists."}
+    )
+    
     @classmethod
     def normalize_username(cls, username):
         """usernames are stored and compared in lowercase"""
         return super().normalize_username(username).lower()
+    
+    @classmethod
+    def normalize_email(cls, email):
+        return email.strip().lower()
     
     def save(self, *args, **kwargs):
         self.username = self.normalize_username(self.username)

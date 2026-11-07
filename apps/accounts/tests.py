@@ -75,10 +75,10 @@ class RuleRequiredTests(TestCase):
         User = get_user_model()
         self.factory = RequestFactory()
         self.admin = User.objects.create_user(
-            "admin1", password="Chaos-Shark-1", role=User.Role.ADMINISTRATOR
+            "admin1", email="admin1@test.com", password="Chaos-Shark-1", role=User.Role.ADMINISTRATOR
         )
         self.tech = User.objects.create_user(
-            "tech2", password="Forge-Lion-1", role=User.Role.TECHNICIAN
+            "tech2", email="tech2@test.com", password="Forge-Lion-1", role=User.Role.TECHNICIAN
         )
         
     def call_view_as(self, user):
@@ -113,10 +113,10 @@ class ManageUsersTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.admin = User.objects.create_user(
-            "admin3", password="Craft-Fish-1", role=User.Role.ADMINISTRATOR
+            "admin3", email="admin3@test.com", password="Craft-Fish-1", role=User.Role.ADMINISTRATOR
         )
         self.tech = User.objects.create_user(
-            "tech6", password="Ready-Prawn-1", role=User.Role.TECHNICIAN
+            "tech6", email="tech6@test.com", password="Ready-Prawn-1", role=User.Role.TECHNICIAN
         )
         
     def test_technician_cannot_open_users_page(self):
@@ -139,27 +139,40 @@ class ManageUsersTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.post(reverse("user_create"), {
             "username": "TECH6", "first_name": "tech", "last_name": "6",
-            "email": "tech6@test.com", "role": "tech",
+            "email": "other@test.com", "role": "tech",
             "password1": "Small-Pass-1", "password2": "Small-Pass-1",
         })
         self.assertEqual(response.status_code, 200)
         self.assertIn("username", response.context["form"].errors)
         
+    def test_duplicate_email_rejected_whatever_the_case(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("user_create"), {
+            "username": "NewUser", "first_name": "New", "last_name": "User",
+            "email": "TECH6@test.com", "role": "tech",
+            "password1": "Small-Pass-1", "password2": "Small-Pass-1",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("email", response.context["form"].errors)
+        self.assertFalse(get_user_model().objects.filter(username="newuser").exists())
+        
     def test_admin_cannot_remove_own_admin_access(self):
         self.client.force_login(self.admin)
         response = self.client.post(
-            reverse("user_update", args=[self.admin.pk]), {"role": "tech", "is_active": "on"}
+            reverse("user_update", args=[self.admin.pk]), {"email": self.admin.email, "role": "tech", "is_active": "on"}
         )
         self.assertEqual(response.status_code, 200)
+        self.assertNotIn("email", response.context["form"].errors)
         self.admin.refresh_from_db()
         self.assertEqual(self.admin.role, "admin")
     
     def test_last_active_admin_cannot_be_demoted(self):
-        superuser = get_user_model().objects.create_superuser("su", password="Wow-Tail-1")
+        superuser = get_user_model().objects.create_superuser("su", email="su@test.com", password="Wow-Tail-1")
         self.client.force_login(superuser)
-        self.client.post(
-            reverse("user_update", args=[self.admin.pk]), {"role": "tech", "is_active": "on"}
+        response = self.client.post(
+            reverse("user_update", args=[self.admin.pk]), {"email": self.admin.email, "role": "tech", "is_active": "on"}
         )
+        self.assertNotIn("email", response.context["form"].errors)
         self.admin.refresh_from_db()
         self.assertEqual(self.admin.role, "admin")
         
@@ -185,7 +198,36 @@ class ManageUsersTests(TestCase):
         self.client.force_login(self.admin)
         self.client.post(reverse("user_delete", args=[self.admin.pk]))
         self.assertTrue(get_user_model().objects.filter(pk=self.admin.pk).exists())
-        
     
+    def test_email_is_required(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("user_create"), {
+            "username": "NoEmail", "first_name": "No", "last_name": "Email",
+            "email": "", "role":  "tech",
+            "password1": "Rand-Word-1", "password2": "Rand-Word-1",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("email", response.context["form"].errors)
+        self.assertFalse(get_user_model().objects.filter(username="noemail").exists())
+    
+    def test_email_stored_in_lower_case(self):
+        self.client.force_login(self.admin)
+        self.client.post(reverse("user_create"), {
+            "username": "MixedEmail", "first_name": "Mixed", "last_name": "Email",
+            "email": "MIXEDEMAIL@test.com", "role":  "tech",
+            "password1": "Pile-Ant-1", "password2": "Pile-Ant-1",
+        })
+        user = get_user_model().objects.get(username="mixedemail")
+        self.assertEqual(user.email, "mixedemail@test.com")
+        
+    def test_edit_keeps_own_email(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("user_update", args=[self.tech.pk]),
+            {"first_name": "Renamed", "email": self.tech.email, "role": "tech", "is_active": "on"}
+        )
+        self.assertRedirects(response, reverse("user_list"))
+        self.tech.refresh_from_db()
+        self.assertEqual(self.tech.first_name, "Renamed")
     
     

@@ -7,7 +7,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Cancel</button>
-                <form method="post" action="{% url 'signout' %}">
+                <form method="post" action="{% url 'sign_out' %}">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-primary">Sign out</button>
                 </form>

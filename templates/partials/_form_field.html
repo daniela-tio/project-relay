@@ -8,6 +8,6 @@
         <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
         {{ field }}
     {% endif %}
-    {% for error in field.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+    {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     {% if field.help_text %}<div class="form-hint">{{ field.help_text|safe }}</div>{% endif %}
 </div>

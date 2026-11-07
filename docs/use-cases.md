@@ -15,7 +15,7 @@ Actions **User** (any-signed in user) is generalised by **Administrator**, **Pro
 | UC05 | View My Projects | User | - | [#28](https://github.com/daniela-tio/project-relay/issues/28) My projects |
 | UC06 | Manage Users | Administrator | Extended by UC07 | [#10](https://github.com/daniela-tio/project-relay/issues/10) Manage users |
 | UC07 | Unlock Account | Administrator | «extend» UC06 | [#10](https://github.com/daniela-tio/project-relay/issues/10) Manage users, [#6](https://github.com/daniela-tio/project-relay/issues/6) Account lockout |
-| UC08 | Manage Trusts, Schools | Administrator | Extended by UC09 | [#15](https://github.com/daniela-tio/project-relay/issues/15) Manage trusts and schools |
+| UC08 | Manage Trusts, Schools | Administrator, Project Manager | Extended by UC09 | [#15](https://github.com/daniela-tio/project-relay/issues/15) Manage trusts and schools |
 | UC09 | Merge School Records | Administrator | «extend» UC08 | [#16](https://github.com/daniela-tio/project-relay/issues/16) Merge school records |
 | UC10 | Import GIAS Data | Administrator | «include» UC11 | [#14](https://github.com/daniela-tio/project-relay/issues/14) Import GIAS data |
 | UC11 | Validate CSV | Administrator | Included by UC10 | [#14](https://github.com/daniela-tio/project-relay/issues/14) Import GIAS data |

@@ -7,10 +7,17 @@ User = get_user_model()
 
 def is_last_active_admin(user):
     """True if there are no other admin users other than this user"""
+    
     others = User.objects.filter(
         is_active = True, role = User.Role.ADMINISTRATOR
     ).exclude(pk=user.pk)
     return not others.exists()
+
+class EmailNormalisationMixin:
+    """Lower-case the email so the unique check ignores case"""
+    
+    def clean_email(self):
+        return User.normalize_email(self.cleaned_data["email"])
 
 
 class SignInForm(AuthenticationForm):
@@ -19,7 +26,7 @@ class SignInForm(AuthenticationForm):
     def clean_username(self):
         return User.normalize_username(self.cleaned_data["username"])
     
-class UserCreateForm(TablerFormMixin, UserCreationForm):
+class UserCreateForm(EmailNormalisationMixin, TablerFormMixin, UserCreationForm):
     """Form for an Administrator to create a user account"""
     
     class Meta(UserCreationForm.Meta):
@@ -32,7 +39,7 @@ class UserCreateForm(TablerFormMixin, UserCreationForm):
             raise forms.ValidationError("A user with that username already exists.")
         return username
     
-class UserUpdateForm(TablerFormMixin, forms.ModelForm):
+class UserUpdateForm(EmailNormalisationMixin, TablerFormMixin, forms.ModelForm):
     """Form for an Administrator to update a users details"""
     
     class Meta:

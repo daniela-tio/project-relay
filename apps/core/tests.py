@@ -24,10 +24,10 @@ class LayoutTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.admin = User.objects.create_user(
-            "admin2", password="Hero-Snake-1", role=User.Role.ADMINISTRATOR
+            "admin2", email="admin2@test.com", password="Hero-Snake-1", role=User.Role.ADMINISTRATOR
         )
         self.tech = User.objects.create_user(
-            "tech3", password="Shadow-Dog-1", role=User.Role.TECHNICIAN
+            "tech3", email="tech3@test.com", password="Shadow-Dog-1", role=User.Role.TECHNICIAN
         )
     
     def test_home_uses_app_layout_and_shows_role(self):

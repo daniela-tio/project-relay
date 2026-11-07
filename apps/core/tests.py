@@ -1,8 +1,8 @@
-from django.test import TestCase
+from django.test import TestCase, Client, RequestFactory
 from django.db import OperationalError
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-
+from django.views.defaults import server_error
 from unittest import mock
 
 class HealthCheckTests(TestCase):
@@ -54,3 +54,30 @@ class LayoutTests(TestCase):
             follow=True,
         )
         self.assertContains(response, "Signed in successfully.")
+        
+class ErrorPagesTest(TestCase):
+    def test_404_uses_custom_page(self):
+        response = self.client.get("/this-page-does-not-exist")
+        self.assertEqual(response.status_code, 404)
+        self.assertTemplateUsed(response, "404.html")
+        
+    def test_403_uses_custom_page(self):
+        User = get_user_model()
+        tech = User.objects.create_user(
+            "tech7", password="Salted-Deer-1", role=User.Role.TECHNICIAN
+        )
+        self.client.force_login(tech)
+        response = self.client.get(reverse("user_list"))
+        self.assertEqual(response.status_code, 403)
+        self.assertTemplateUsed(response, "403.html")
+        
+    def test_csrf_failure_uses_custom_page(self):
+        client = Client(enforce_csrf_checks=True)
+        response = client.post(reverse("sign_in"), {"username": "a", "password": "b"})
+        self.assertEqual(response.status_code, 403)
+        self.assertTemplateUsed(response, "403_csrf.html")
+        
+    def test_500_page_renders(self):
+        response = server_error(RequestFactory().get("/"))
+        self.assertEqual(response.status_code, 500)
+        self.assertIn(b"Something went wrong", response.content)

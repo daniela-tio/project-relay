@@ -1,0 +1,41 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Users{% endblock %}
+{% block page_title %}Users{% endblock %}
+
+{% block content %}
+<div class="mb-3 text-end">
+    <a href="{% url 'user_create' %}" class="btn btn-primary">Add user</a>
+</div>
+<div class="card">
+    <div class="table-responsive">
+        <table class="table card-table table-vcenter">
+            <thead>
+                <tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th class="w-1"></th></tr>
+            </thead>
+            <tbody>
+                {% for account in users %}
+                <tr>
+                    <td>{{ account.username }}</td>
+                    <td>{{ account.get_full_name|default:"-" }}</td>
+                    <td>{{ account.get_role_display }}</td>
+                    <td>
+                        {% if account.is_active %}<span class="badge bg-green-lt">Active</span>
+                        {% else %}<span class="badge bg-secondary-lt">Inactive</span>{% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        <a href="{% url 'user_update' account.pk %}" class="btn btn-sm">Edit</a>
+                        <a href="{% url 'user_set_password' account.pk %}" class="btn btn-sm">Set Password</a>
+                        {% if account != user %}
+                        <a href="{% url 'user_delete' account.pk %}" class="btn btn-sm btn-outline-danger">Delete</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-secondary">No users yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

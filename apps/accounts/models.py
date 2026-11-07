@@ -13,6 +13,15 @@ class User(AbstractUser):
         max_length = 10, choices = Role.choices, default = Role.TECHNICIAN
     )
     
+    @classmethod
+    def normalize_username(cls, username):
+        """usernames are stored and compared in lowercase"""
+        return super().normalize_username(username).lower()
+    
+    def save(self, *args, **kwargs):
+        self.username = self.normalize_username(self.username)
+        super().save(*args, **kwargs)
+    
     # Role checks
     @property
     def is_administrator(self):

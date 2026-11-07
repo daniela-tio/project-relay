@@ -1,16 +1,5 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Access denied · Project Relay</title>
-  </head>
-  <body>
-    <h1>Access denied</h1>
-    <p>
-      you do not have permission to do that. If you think this is wrong, contact
-      an adminsitrator.
-    </p>
-    <p><a href="{% url 'home' %}">Back to Home</a></p>
-  </body>
-</html>
+{% extends "layouts/error.html" %}
+{% block title %}Access denied{% endblock %}
+{% block code %}403{% endblock %}
+{% block heading %}Access denied{% endblock %}
+{% block message %}You do not have permission to do that. If you think this is wrong, contact your administrator.{% endblock %}

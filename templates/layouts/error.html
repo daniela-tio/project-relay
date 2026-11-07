@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block body%}
+<div class="page page-center">
+    <div class="container-tight py-4">
+        <div class="empty">
+            <div class="empty-header">{% block code %}{% endblock %}</div>
+            <p class="empty-title">{% block heading %}{% endblock %}</p>
+            <p class="empty-subtitle text-secondary">{% block message %}{% endblock %}</p>
+            <div class="empty-action">
+                <a href="/" class="btn btn-primary">Back to home</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -15,11 +15,20 @@ class Trust(models.Model):
     trust_type = models.CharField(max_length = 20, choices = TrustType.choices)
     is_manual = models.BooleanField(default = False)
     
+    """TIO-owned details. These are never changed by the GIAS import"""
+    short_name = models.CharField(max_length = 50, blank = True)
+    website = models.URLField(blank = True)
+    notes = models.TextField(blank = True)
+    
     class Meta:
         ordering = ["name"]
         
     def __str__(self):
         return self.name
+    
+    @property
+    def display_name(self):
+        return self.short_name or self.name
 
 DFE_NUMBER_PATTERN = r"^\d{7}$"
 
@@ -51,7 +60,7 @@ class School(models.Model):
     town = models.CharField(max_length = 100, blank=True)
     postcode = models.CharField(max_length = 10, blank=True)
     is_manual = models.BooleanField(default=False)
-    
+        
     class Meta:
         ordering = ["name"]
         constraints = [

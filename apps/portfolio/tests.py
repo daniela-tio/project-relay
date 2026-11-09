@@ -7,6 +7,10 @@ from django.db.models import ProtectedError
 from django.test import TestCase
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
+from unittest import mock
 from apps.portfolio.models import School, Trust
 from apps.portfolio.gias import REQUIRED_COLUMNS, GiasFileError, file_date_from_name, load_establishments, run_import
 from apps.portfolio.models import GiasEstablishment, GiasImport
@@ -144,3 +148,56 @@ class GiasImportTests(TestCase):
             csv_file.close()
             with self.assertRaisesMessage(CommandError, "missing column"):
                 call_command("import_gias", csv_file.name, stdout=io.StringIO())
+                
+class GiasImportPageTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            "admin7", email = "admin7@test.com", password = "Bright-Kite-1", role = User.Role.ADMINISTRATOR
+        )
+        self.pm = User.objects.create_user(
+            "pm7", email = "pm7@test.com", password = "Bright-Kite-1", role = User.Role.PROJECT_MANAGER
+        )
+        self.tech = User.objects.create_user(
+            "tech7", email = "tech7@test.com", password = "Bright-Kite-1", role = User.Role.TECHNICIAN
+        )
+        
+    def upload(self, name="edubasealldata20261107.csv", rows=(OPEN_ACADEMY,)):
+        return SimpleUploadedFile(name, make_gias_csv(list(rows)).getvalue(), content_type="text/csv")
+    
+    def test_only_administrators_can_open_the_page(self):
+        for user, status in [(self.tech, 403), (self.pm, 403), (self.admin, 200)]:
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                self.assertEqual(self.client.get(reverse("gias_import")).status_code, status)
+    
+    def test_valid_upload_imports_and_redirects(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("gias_import"), {"csv_file": self.upload()})
+        self.assertRedirects(response, reverse("gias_import"))
+        record = GiasImport.objects.get()
+        self.assertEqual(record.status, GiasImport.Status.SUCCEEDED)
+        self.assertEqual(record.uploaded_by, self.admin)
+        self.assertEqual(GiasEstablishment.objects.count(), 1)
+        
+    def test_non_csv_file_is_rejected(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("gias_import"), {"csv_file": self.upload(name = "schools.txt")})
+        self.assertContains(response, "The file must be a .csv file.")
+        self.assertFalse(GiasImport.objects.exists())
+        
+    def test_upload_refused_while_an_import_is_running(self):
+        GiasImport.objects.create(file_name = "other.csv", status = GiasImport.Status.RUNNING)
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("gias_import"), {"csv_file": self.upload()}, follow=True)
+        self.assertContains(response, "An import is already running.")
+        self.assertEqual(GiasEstablishment.objects.count(), 0)
+        
+    def test_unexpected_error_marks_import_failed(self):
+        with mock.patch(
+            "apps.portfolio.gias.load_establishments", 
+            side_effect=RuntimeError("boom"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    run_import(make_gias_csv([OPEN_ACADEMY]), "edubasealldata20261107.csv")
+        self.assertEqual(GiasImport.objects.get().status, GiasImport.Status.FAILED)

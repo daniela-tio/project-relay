@@ -3,7 +3,8 @@ import io
 import re 
 from datetime import datetime
 from django.db import transaction
-from apps.portfolio.models import GiasEstablishment, School, Trust
+from django.utils import timezone
+from apps.portfolio.models import GiasEstablishment, School, Trust, GiasImport
 
 REQUIRED_COLUMNS = [
     "URN", "LA (code)", "EstablishmentNumber", "EstablishmentName", "EstablishmentStatus (name)", "CloseDate", "PhaseOfEducation (name)",
@@ -78,11 +79,35 @@ def load_establishments(binary_file):
         GiasEstablishment.objects.all().delete()
         for row in reader:
             rows_read += 1
-            establishment = row_to_establishment(row)
+            try: 
+                establishment = row_to_establishment(row)
+            except (KeyError, ValueError) as error:
+                raise GiasFileError(
+                    f"Could't read row {rows_read + 1} of the file: {error}."
+                )
             if establishment:
                 batch.append(establishment)
-                if len(batch) >= BATCH_SIZE:
-                    GiasEstablishment.objects.bulk_create(batch)
-                    batch = []
+            if len(batch) >= BATCH_SIZE:
+                GiasEstablishment.objects.bulk_create(batch)
+                batch = []
         GiasEstablishment.objects.bulk_create(batch)
     return rows_read
+
+def run_import(binary_file, file_name, user=None):
+    """Run import and record it in the import history."""
+    
+    record = GiasImport.objects.create(
+        file_name = file_name,
+        file_date = file_date_from_name(file_name),
+        uploaded_by = user,
+    )
+    try:
+        record.rows_read = load_establishments(binary_file)
+        record.status = GiasImport.Status.SUCCEEDED
+    except GiasFileError as error:
+        record.status = GiasImport.Status.FAILED
+        record.error_summary = str(error)
+    finally:
+        record.finished_at = timezone.now()
+        record.save()
+    return record

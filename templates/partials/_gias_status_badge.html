@@ -1,0 +1,7 @@
+{% if record.status == "succeeded" %}
+    <span class="badge bg-green-lt">Succeeded</span>
+{% elif record.status == "failed" %}
+    <span class="badge bg-red-lt">Failed</span>
+{% else %}
+    <span class="badge bg-blue-lt">Running</span>
+{% endif %}

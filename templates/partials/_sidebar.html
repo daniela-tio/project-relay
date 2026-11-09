@@ -19,6 +19,9 @@
                 <li class="nav-item {% if request.resolver_match.url_name|slice:':5' == 'user_' %}active{% endif %}">
                     <a href="{% url 'user_list' %}" class="nav-link"><span class="nav-link-title">Users</span></a>
                 </li>
+                <li class="nav-item {% if request.resolver_match.url_name|slice:':4' == 'gias' %}active{% endif %}">
+                    <a href="{% url 'gias_import' %}" class="nav-link"><span class="nav-link-title">GIAS Import</span></a>
+                </li>
                 <li class="nav-item">
                     <span class="nav-link disabled" aria-disabled="true">System log (coming soon)</span>
                 </li>

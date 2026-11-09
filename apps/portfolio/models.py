@@ -1,6 +1,7 @@
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Q
+from django.conf import settings
 
 class Trust(models.Model):
     """A trust of schools, imported from GIAS or added manually"""
@@ -76,3 +77,50 @@ class School(models.Model):
     @property
     def formatted_dfe_number(self):
         return f"{self.dfe_number[:3]}/{self.dfe_number[3:]}"
+
+class GiasEstablishment(models.Model):
+    """Import from the latest GIAS file. Replaced on every import."""
+    
+    urn = models.PositiveIntegerField(unique = True)
+    dfe_number = models.CharField(max_length = 7, db_index = True)
+    name = models.CharField(max_length = 255)
+    status = models.CharField(max_length = 20, choices = School.Status.choices)
+    close_date = models.DateField(null = True, blank = True)
+    phase = models.CharField(max_length = 100, blank = True)
+    town = models.CharField(max_length = 100, blank = True)
+    postcode = models.CharField(max_length = 10, blank = True)
+    trust_code = models.PositiveIntegerField(null = True, blank = True)
+    trust_name = models.CharField(max_length = 255, blank = True)
+    trust_type = models.CharField(max_length = 20, choices = Trust.TrustType.choices, blank = True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.urn})"
+    
+class GiasImport(models.Model):
+    """Record of GIAS file upload."""
+    
+    class Status(models.TextChoices):
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        
+    file_name = models.CharField(max_length = 255)
+    file_date = models.DateField(null = True, blank = True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete = models.SET_NULL, null = True, related_name = "gias_imports"
+    )
+    started_at = models.DateTimeField(auto_now_add = True)
+    finished_at = models.DateTimeField(null = True, blank = True)
+    status = models.CharField(max_length = 20, choices = Status.choices, default = Status.RUNNING)
+    rows_read = models.PositiveIntegerField(default = 0)
+    error_summary = models.TextField(blank = True)
+    
+    class Meta:
+        ordering = ["-started_at"]
+        
+    @property
+    def duration(self):
+        """Time the import took or None while it is still running"""
+        if self.finished_at:
+            return round((self.finished_at - self.started_at).total_seconds())
+        return None

@@ -82,7 +82,7 @@ class GiasEstablishment(models.Model):
     """Import from the latest GIAS file. Replaced on every import."""
     
     urn = models.PositiveIntegerField(unique = True)
-    def_number = models.CharField(max_length = 7, db_index = True)
+    dfe_number = models.CharField(max_length = 7, db_index = True)
     name = models.CharField(max_length = 255)
     status = models.CharField(max_length = 20, choices = School.Status.choices)
     close_date = models.DateField(null = True, blank = True)

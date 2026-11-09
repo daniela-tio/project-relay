@@ -13,7 +13,7 @@ REQUIRED_COLUMNS = [
 STATUS_MAP = {
     "Open": School.Status.OPEN,
     "Closed": School.Status.CLOSED,
-    "Open, bus proposed to close": School.Status.PROPOSED_TO_CLOSE
+    "Open, but proposed to close": School.Status.PROPOSED_TO_CLOSE,
     "Proposed to open": School.Status.PROPOSED_TO_OPEN,
 }
 
@@ -49,7 +49,7 @@ def row_to_establishment(row):
         return None
     return GiasEstablishment(
         urn = int(row["URN"]),
-        def_number = row["LA (code)"] + row["EstablishmentNumber"],
+        dfe_number = row["LA (code)"] + row["EstablishmentNumber"],
         name = row["EstablishmentName"],
         status = STATUS_MAP[row["EstablishmentStatus (name)"]],
         close_date = parse_close_date(row["CloseDate"]),

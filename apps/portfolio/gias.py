@@ -107,6 +107,10 @@ def run_import(binary_file, file_name, user=None):
     except GiasFileError as error:
         record.status = GiasImport.Status.FAILED
         record.error_summary = str(error)
+    except Exception:
+        record.status = GiasImport.Status.FAILED
+        record.error_summary = "The import stopped because of an unexpected error."
+        raise
     finally:
         record.finished_at = timezone.now()
         record.save()

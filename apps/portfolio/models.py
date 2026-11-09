@@ -112,8 +112,15 @@ class GiasImport(models.Model):
     started_at = models.DateTimeField(auto_now_add = True)
     finished_at = models.DateTimeField(null = True, blank = True)
     status = models.CharField(max_length = 20, choices = Status.choices, default = Status.RUNNING)
-    row_read = models.PositiveIntegerField(default = 0)
+    rows_read = models.PositiveIntegerField(default = 0)
     error_summary = models.TextField(blank = True)
     
     class Meta:
         ordering = ["-started_at"]
+        
+    @property
+    def duration(self):
+        """Time the import took or None while it is still running"""
+        if self.finished_at:
+            return round((self.finished_at - self.started_at).total_seconds())
+        return None

@@ -29,3 +29,13 @@ class SchoolModelTests(TestCase):
         with self.assertRaises(ProtectedError):
             self.trust.delete()
         self.assertTrue(Trust.objects.filter(pk=self.trust.pk).exists())
+        
+class TrustModelTests(TestCase):
+    def test_display_name_falls_back_to_full_name(self):
+        trust = Trust(name = "Test Learning Trust")
+        self.assertEqual(trust.display_name, "Test Learning Trust")
+    
+    def test_display_name_uses_short_name_when_set(self):
+        trust = Trust(name = "Test Learning Trust", short_name = "Test LT")
+        self.assertEqual(trust.display_name, "Test LT")
+        

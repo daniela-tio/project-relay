@@ -1,0 +1,88 @@
+import csv
+import io 
+import re 
+from datetime import datetime
+from django.db import transaction
+from apps.portfolio.models import GiasEstablishment, School, Trust
+
+REQUIRED_COLUMNS = [
+    "URN", "LA (code)", "EstablishmentNumber", "EstablishmentName", "EstablishmentStatus (name)", "CloseDate", "PhaseOfEducation (name)",
+    "Town", "Postcode", "Trusts (code)", "Trusts (name)", "TrustSchoolFlag (name)",
+]
+
+STATUS_MAP = {
+    "Open": School.Status.OPEN,
+    "Closed": School.Status.CLOSED,
+    "Open, bus proposed to close": School.Status.PROPOSED_TO_CLOSE
+    "Proposed to open": School.Status.PROPOSED_TO_OPEN,
+}
+
+TRUST_TYPE_MAP = {
+    "Supported by a multi-academy trust": Trust.TrustType.MULTI_ACADEMY,
+    "Supported by a single-academy trust": Trust.TrustType.SINGLE_ACADEMY,
+    "Supported by a trust": Trust.TrustType.FOUNDATION,
+}
+
+BATCH_SIZE = 1000
+
+class GiasFileError(Exception):
+    """The uploaded file is not usable."""
+    
+def file_date_from_name(file_name):
+    """Read the date from the name of the CSV"""
+    
+    match = re.search(r"(\d{8})", file_name)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d").date()
+    except ValueError:
+        return None
+    
+def parse_close_date(value):
+    return datetime.strptime(value, "%d-%m-%Y").date() if value else None
+
+def row_to_establishment(row):
+    """Turn CSV row into a GIASEstablishment or none to skip it"""
+    
+    if not row["EstablishmentNumber"]:
+        return None
+    return GiasEstablishment(
+        urn = int(row["URN"]),
+        def_number = row["LA (code)"] + row["EstablishmentNumber"],
+        name = row["EstablishmentName"],
+        status = STATUS_MAP[row["EstablishmentStatus (name)"]],
+        close_date = parse_close_date(row["CloseDate"]),
+        phase = row["Town"],
+        postcode = row["Postcode"],
+        trust_code = int(row["Trusts (code)"]) if row["Trusts (code)"] else None,
+        trust_name = row["Trusts (name)"],
+        trust_type = TRUST_TYPE_MAP.get(row["TrustSchoolFlag (name)"], ""),
+    )
+    
+def load_establishments(binary_file):
+    """Replace the GIAS table with the files rows."""
+    
+    text = io.TextIOWrapper(binary_file, encoding = "cp1252", newline = "")
+    reader = csv.DictReader(text)
+    
+    for column in REQUIRED_COLUMNS:
+        if column not in (reader.fieldnames or []):
+            raise GiasFileError(
+                f'Something does not look right with the file: missing column "{column}".' 
+            )
+    
+    rows_read = 0
+    batch = []
+    with transaction.atomic():
+        GiasEstablishment.objects.all().delete()
+        for row in reader:
+            rows_read += 1
+            establishment = row_to_establishment(row)
+            if establishment:
+                batch.append(establishment)
+                if len(batch) >= BATCH_SIZE:
+                    GiasEstablishment.objects.bulk_create(batch)
+                    batch = []
+        GiasEstablishment.objects.bulk_create(batch)
+    return rows_read

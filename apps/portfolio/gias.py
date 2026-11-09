@@ -24,7 +24,7 @@ TRUST_TYPE_MAP = {
     "Supported by a trust": Trust.TrustType.FOUNDATION,
 }
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 10000
 
 class GiasFileError(Exception):
     """The uploaded file is not usable."""

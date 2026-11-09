@@ -1,12 +1,15 @@
 import csv
 import io
+import tempfile
 from datetime import date
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.test import TestCase
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from apps.portfolio.models import School, Trust
-from apps.portfolio.gias import REQUIRED_COLUMNS, GiasFileError, file_date_from_name, load_establishments
-from apps.portfolio.models import GiasEstablishment
+from apps.portfolio.gias import REQUIRED_COLUMNS, GiasFileError, file_date_from_name, load_establishments, run_import
+from apps.portfolio.models import GiasEstablishment, GiasImport
 
 
 class SchoolModelTests(TestCase):
@@ -107,3 +110,37 @@ class GiasImportTests(TestCase):
     def test_file_date_is_read_from_file_name(self):
         self.assertEqual(file_date_from_name("edubasealldata20261107.csv"), date(2026, 11, 7))
         self.assertIsNone(file_date_from_name("schools.csv"))
+        
+    def test_run_import_records_success(self):
+        record = run_import(make_gias_csv([OPEN_ACADEMY]), "edubasealldata20261107.csv")
+        self.assertEqual(record.status, GiasImport.Status.SUCCEEDED)
+        self.assertEqual(record.rows_read, 1)
+        self.assertEqual(record.file_date, date(2026, 11, 7))
+        self.assertIsNotNone(record.finished_at)
+        
+    def test_run_import_records_failure(self):
+        record = run_import(make_gias_csv([OPEN_ACADEMY], ["URN"]), "bad.csv")
+        self.assertEqual(record.status, GiasImport.Status.FAILED)
+        self.assertIn("missing column", record.error_summary)
+        self.assertIsNotNone(record.finished_at)
+        
+    def test_bad_row_gives_readable_error_and_keeps_data(self):
+        load_establishments(make_gias_csv([OPEN_ACADEMY]))
+        bad = {**OPEN_ACADEMY, "URN": "9999999", "EstablishmentStatus (name)": "Randomness"}
+        with self.assertRaisesMessage(GiasFileError, "row 2"):
+            load_establishments(make_gias_csv([bad]))
+        self.assertEqual(GiasEstablishment.objects.count(), 1)
+        
+    def test_command_imports_file(self):
+        with tempfile.NamedTemporaryFile(suffix = ".csv", delete_on_close = False) as csv_file:
+            csv_file.write(make_gias_csv([OPEN_ACADEMY]).getvalue())
+            csv_file.close()
+            call_command("import_gias", csv_file.name, stdout=io.StringIO())
+        self.assertTrue(GiasEstablishment.objects.filter(urn=1946823).exists())
+        
+    def test_command_reports_failure(self):
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete_on_close=False) as csv_file:
+            csv_file.write(make_gias_csv([OPEN_ACADEMY], ["URN"]).getvalue())
+            csv_file.close()
+            with self.assertRaisesMessage(CommandError, "missing column"):
+                call_command("import_gias", csv_file.name, stdout=io.StringIO())

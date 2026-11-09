@@ -7,7 +7,7 @@ class Command(BaseCommand):
     help = "Import the GIAS all-establishments CSV into the GIAS table."
     
     def add_arguments(self, parser):
-        parser.add_arguments("csv_path", help="PAth to the edubasealldata CSV file")
+        parser.add_argument("csv_path", help="Path to the edubasealldata CSV file")
         
     def handle(self, *args, csv_path, **options):
         path = Path(csv_path)

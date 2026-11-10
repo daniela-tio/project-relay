@@ -11,9 +11,10 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from unittest import mock
-from apps.portfolio.models import School, Trust
+from apps.portfolio.models import School, Trust, GiasEstablishment, GiasImport
 from apps.portfolio.gias import REQUIRED_COLUMNS, GiasFileError, file_date_from_name, load_establishments, run_import
-from apps.portfolio.models import GiasEstablishment, GiasImport
+from apps.portfolio.services import add_school_from_gias, open_schools_in_trust
+
 
 
 class SchoolModelTests(TestCase):
@@ -201,3 +202,44 @@ class GiasImportPageTests(TestCase):
                 with self.assertRaises(RuntimeError):
                     run_import(make_gias_csv([OPEN_ACADEMY]), "edubasealldata20261107.csv")
         self.assertEqual(GiasImport.objects.get().status, GiasImport.Status.FAILED)
+        
+class GiasServiceTests(TestCase):
+    def setUp(self):
+        load_establishments(make_gias_csv([OPEN_ACADEMY]))
+        self.establishment = GiasEstablishment.objects.get(urn="1946823")
+    
+    def test_school_is_copied_with_its_trust(self):
+        school = add_school_from_gias(self.establishment)
+        expected_dfe = OPEN_ACADEMY["LA (code)"] + OPEN_ACADEMY["EstablishmentNumber"]
+        self.assertEqual(school.dfe_number, expected_dfe)
+        self.assertFalse(school.is_manual)
+        self.assertEqual(school.trust.gias_code, int(OPEN_ACADEMY["Trusts (code)"]))
+        self.assertEqual(school.trust.name, OPEN_ACADEMY["Trusts (name)"])
+    
+    def test_existing_school_is_reused_not_duplicated(self):
+        first = add_school_from_gias(self.establishment)
+        second = add_school_from_gias(self.establishment)
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(School.objects.count(), 1)
+        
+    def test_existing_trust_is_reused(self):
+        Trust.objects.create(name = "Northfield LT", gias_code = 5102, trust_type = Trust.TrustType.MULTI_ACADEMY)
+        add_school_from_gias(self.establishment)
+        self.assertEqual(Trust.objects.count(), 1)
+        
+    def test_standalone_school_has_no_trust(self):
+        standalone = {**OPEN_ACADEMY, "URN": "100200", "EstablishmentNumber": "2100", "Trusts (code)": "", "Trusts (name)": "", "TrustSchoolFlag (name)": "Not applicable"}
+        load_establishments(make_gias_csv([standalone]))
+        school = add_school_from_gias(GiasEstablishment.objects.get(urn=100200))
+        self.assertIsNone(school.trust)
+        
+    def test_open_schools_in_trust_excludes_closed_and_includes_manual(self):
+        closed = {**OPEN_ACADEMY, "URN": "100111", "EstablishmentNumber": "9999", "EstablishmentName": "Old School", "EstablishmentStatus (name)": "Closed"}
+        load_establishments(make_gias_csv([OPEN_ACADEMY, closed]))
+        trust = Trust.objects.create(name = "Northfield", gias_code = int(OPEN_ACADEMY["Trusts (code)"]), trust_type = Trust.TrustType.MULTI_ACADEMY)
+        School.objects.create(name = "Annex School", dfe_number = "2035555", trust = trust, is_manual = True)
+        expected_dfe = OPEN_ACADEMY["LA (code)"] + OPEN_ACADEMY["EstablishmentNumber"]
+        self.assertEqual(
+            open_schools_in_trust(trust),
+            [("2035555", "Annex School"), (expected_dfe, OPEN_ACADEMY["EstablishmentName"])],
+        )

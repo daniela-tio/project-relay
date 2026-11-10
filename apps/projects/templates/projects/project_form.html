@@ -1,0 +1,91 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}New Project{% endblock %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <h1 class="page-title">New Project</h1>
+    <div class="text-secondary">
+        For {{ customer.name }} ({{ customer.formatted_dfe_number }})
+        {% if customer.has_trust %} · {{ customer.trust_name }}{% endif %}
+    </div>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% if form.errors %}
+    <div class="alert alert-danger" role="alert">Please fix the problems below.</div>
+    {% endif %}
+    <div class="row row-cards">
+        <div class="col-lg-6">
+            <div class="card mb-3">
+                <div class="card-header"><h3 class="card-title">Customer and scope</h3></div>
+                <div class="card-body">
+                    {% include "partials/_form_field.html" with field=form.name %}
+
+                    <div class="mb-3">
+                        <div class="form-label">Scope</div>
+                        {% for radio in form.scope %}
+                        <label class="form-check">
+                            {{ radio.tag }}
+                            <span class="form-check-label">{{ radio.choice_label }}</span>
+                        </label>
+                        {% endfor %}
+                        {% for error in form.scope.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+                    </div>
+
+                    {% if form.selected_schools %}
+                    <div class="mb-3">
+                        <div class="form-label">{{ form.selected_schools.label }}</div>
+                        <div class="form-hint mb-2">Used when the scope is "Selected schools"</div>
+                        {% for checkbox in form.selected_schools %}
+                        <label class="form-check">
+                            {{ checkbox.tag }}
+                            <span class="form-check-label">{{ checkbox.choice_label }}</span>
+                        </label>
+                        {% endfor %}
+                        {% for error in form.selected_schools.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header"><h3 class="card-title">Halo links <span class="text-secondary fw-normal">(optional)</span></h3></div>
+                <div class="card-body">
+                    {% include "partials/_form_field.html" with field=form.halo_opportunity_url %}
+                    {% include "partials/_form_field.html" with field=form.halo_presales_url %}
+                    {% include "partials/_form_field.html" with field=form.halo_project_url %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card mb-3">
+                <div class="card-header"><h3 class="card-title">Dates</h3></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col">{% include "partials/_form_field.html" with field=form.start_date %}</div>
+                        <div class="col">{% include "partials/_form_field.html" with field=form.target_end_date %}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header"><h3 class="card-title">People</h3></div>
+                <div class="card-body">
+                    {% include "partials/_form_field.html" with field=form.pm %}
+                    <div class="form-hint">Users with the PM or Administrator role.</div>
+                </div>
+            </div>
+
+            <p class="text-secondary small">New projects start in <strong>Planning</strong>.</p>
+        </div>
+    </div>
+
+    <div class="text-end border-top pt-3">
+        <a href="{% url 'project_customer' %}" class="btn">Cancel</a>
+        <button type="submit" class="btn btn-primary">Create project</button>
+    </div>
+</form>
+{% endblock %}

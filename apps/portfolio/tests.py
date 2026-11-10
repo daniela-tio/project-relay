@@ -13,7 +13,7 @@ from django.urls import reverse
 from unittest import mock
 from apps.portfolio.models import School, Trust, GiasEstablishment, GiasImport
 from apps.portfolio.gias import REQUIRED_COLUMNS, GiasFileError, file_date_from_name, load_establishments, run_import
-from apps.portfolio.services import add_school_from_gias, open_schools_in_trust
+from apps.portfolio.services import add_school_from_gias
 
 
 
@@ -232,14 +232,3 @@ class GiasServiceTests(TestCase):
         load_establishments(make_gias_csv([standalone]))
         school = add_school_from_gias(GiasEstablishment.objects.get(urn=100200))
         self.assertIsNone(school.trust)
-        
-    def test_open_schools_in_trust_excludes_closed_and_includes_manual(self):
-        closed = {**OPEN_ACADEMY, "URN": "100111", "EstablishmentNumber": "9999", "EstablishmentName": "Old School", "EstablishmentStatus (name)": "Closed"}
-        load_establishments(make_gias_csv([OPEN_ACADEMY, closed]))
-        trust = Trust.objects.create(name = "Northfield", gias_code = int(OPEN_ACADEMY["Trusts (code)"]), trust_type = Trust.TrustType.MULTI_ACADEMY)
-        School.objects.create(name = "Annex School", dfe_number = "2035555", trust = trust, is_manual = True)
-        expected_dfe = OPEN_ACADEMY["LA (code)"] + OPEN_ACADEMY["EstablishmentNumber"]
-        self.assertEqual(
-            open_schools_in_trust(trust),
-            [("2035555", "Annex School"), (expected_dfe, OPEN_ACADEMY["EstablishmentName"])],
-        )

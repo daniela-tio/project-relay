@@ -11,6 +11,7 @@
                 <li class="nav-item {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
                     <a class="nav-link" href="{% url 'home' %}"><span class="nav-link-title">Home</span></a>
                 </li>
+                
 
                 {% if user.can_manage_users %}
                 <li class="nav-item mt-3">

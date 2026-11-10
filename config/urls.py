@@ -22,6 +22,7 @@ urlpatterns = [
     path('', include('apps.core.urls')),
     path('', include('apps.accounts.urls')),
     path('', include('apps.portfolio.urls')),
+    path('', include('apps.projects.urls')),
 ]
 
 if settings.ADMIN_ENABLED:

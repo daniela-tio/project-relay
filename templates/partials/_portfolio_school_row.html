@@ -1,0 +1,20 @@
+<tr>
+    <td></td>
+    <td {% if indent %} style="padding-left: 36px"{% endif %}>
+        <strong>{{ row.name }}</strong>
+        <div class="small text-secondary">{{ row.school.phase|default:"School" }}{% if not indent %} · standalone school{% endif %}</div>
+    </td>
+    <td>{{ row.school.formatted_dfe_number }}</td>
+    <td>{{ row.school.town|default:"-" }}</td>
+    <td>
+        {{ row.active_projects }}
+        {% if row.needs_attention %}<span class="badge bg-red-lt">Needs attention</span>{% endif %}
+    </td>
+    <td>{% if row.school.is_manual %}Manual{% else %}GIAS{% endif %}</td>
+    <td>
+        {% if row.school.status == "open" %}<span class="badge bg-green-lt">Open</span>
+        {% elif row.school.status == "closed" %}<span class="badge bg-secondary-lt">Closed</span>
+        {% elif row.school.status == "proposed_close" %}<span class="badge bg-yellow-lt">Proposed to close</span>
+        {% else %}<span class="badge bg-blue-lt">{{ row.school.get_status_display }}</span>{% endif %}
+    </td>
+</tr>

@@ -1,0 +1,72 @@
+{% extends "layouts/apps.html" %}
+
+{% block title %}Portfolio{% endblock %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <div>
+        <h1 class="page-title">Portfolio</h1>
+        <div class="text-secondary">Trusts and Schools with projects</div>
+    </div>
+    {% if user.can_edit_project_data %}
+    <a href="{% url 'project_customer' %}" class="btn btn-primary">Create project</a>
+    {% endif %}
+</div>
+
+{% if not has_projects %}
+    <div class="empty">
+        <p class="empty-title">No projects yet</p>
+        <p class="emtpy-subtitle text-subtitle">Trusts and schools appear here one they have a project.</p>
+        {% if user.can_edit_project_data %}
+        <div class="empty-action"><a href="{% url 'project_customer' %}" class="btn btn-primary">Create project</a></div>
+        {% endif %}
+    </div>
+{% else %}
+    <form method="get" class="mb-3" style="max-width: 420px;">
+        <input type="search" name="q" value="{{ query }}" class="form-control" placeholder="Search..." aria-label="Search portfolio">
+    </form>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table card-table table-vcenter">
+                <thead>
+                    <tr>
+                        <th style="width: 44px"><span class="visually-hidden">Show schools</span></th>
+                        <th>Name</th><th>DFE / Trust code</th><th>Town</th><th>Active projects</th><th>Source</th><th>Status</th>
+                    </tr>
+                </thead>
+                {% for row in rows %}
+                <tbody>
+                    <tr>
+                        <td>
+                            <button type="button" class="btn btn-ghost-secondary btn-icon bt-sm" data-bs-toggle="collapse" data-bs-target="#trust-{{ rwo.trust.pk }}" aria-label="Show schools in {{ row.name }}">›</button>
+                        </td>
+                        <td>
+                            <strong>{{ row.name }}</strong>
+                            <div class="small text-secondary">Trust · {{ row.schools|length }} school{{ row.schools|length|pluralize }}</div>
+                        </td>
+                        <td>{{ row.trust.gias_code|default:"-" }}</td>
+                        <td class="text-secondary">-</td>
+                        <td>{{ row.active_projects }}</td>
+                        <td>{% if row.trust.is_manual %}Manual{% else %}GIAS{% endif %}</td>
+                        <td class="text-secondary">-</td>
+                    </tr>
+                </tbody>
+                <tbody class="collapse{% if query %} show{% endif %}" id="trust-{{ row.trust.pk }}">
+                    {% for child in row.schools %}
+                        {% include "partials/_portfolio_school_row.html" with row=child indent=True %}
+                    {% endfor %}
+                </tbody>
+                {% else %}
+                <tbody>
+                    {% include "partials/_portfolio_school_row.html" with row=child indent=True %}
+                </tbody>
+                {% endif %}
+            {% empty %}
+                <tbody><tr><td colspan="7" class="text-secondary">No trusts or schools match "{{ query }}".</td></tr></tbody>
+            {% endfor %}
+            </table>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

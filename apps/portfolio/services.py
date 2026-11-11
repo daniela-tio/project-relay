@@ -50,10 +50,10 @@ def find_school_for_project(dfe_number):
     closed_row = rows.first()
     if closed_row:
         closed_on = f" on {closed_row.close_date:%-d %b %Y}" if closed_row.close_date else ""
-        raise SchoolLookupError(f"This school closed {closed_on}. Closed schools can't be added.")
+        raise SchoolLookupError(f"This school closed{closed_on}. Closed schools can't be added.")
         
     if not GiasImport.objects.filter(status = GiasImport.Status.SUCCEEDED).exists():
         raise SchoolLookupError(
             "No GIAS data has been imported yet. Add the school by hand."
         )
-    raise SchoolLookupError(f"No with DFE number {shown} in the latest GIAS file.")
+    raise SchoolLookupError(f"No DFE number {shown} in the latest GIAS file.")

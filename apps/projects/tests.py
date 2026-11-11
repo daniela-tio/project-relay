@@ -54,15 +54,15 @@ class NewProjectTests(TestCase):
         
     def test_closed_school_is_refused(self):
         response = self.client.post(reverse("project_customer"), {"dfe_number": shown(CLOSED_SCHOOL)})
-        self.assertContains(response, "Closed schools can't be added.")
+        self.assertIn("Closed schools can't be added.", response.context["form"].errors["dfe_number"][0])
         
     def test_unknown_dfe_number_is_refused(self):
-        response = self.client.post(reverse("project_customer"), {"dfe_number": dfe(OPEN_ACADEMY)})
-        self.assertContains(response, "No school with DFE number 999/9999")
+        response = self.client.post(reverse("project_customer"), {"dfe_number": "999/9999"})
+        self.assertContains(response, "No DFE number 999/9999 in the latest GIAS file.")
         
     def test_dfe_number_must_use_the_slash_format(self):
         response = self.client.post(reverse("project_customer"), {"dfe_number": dfe(OPEN_ACADEMY)})
-        self.assertContains(response, "Enter the DFE number as 123/4567.")
+        self.assertContains(response, "Enter the DFE number.")
         
     def test_edited_url_with_unknown_school_goes_back_to_step_one(self):
         response = self.client.get(f"{reverse('project_create')}?school=0000000")

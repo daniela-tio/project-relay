@@ -8,8 +8,9 @@ from urllib.parse import urlencode
 from apps.accounts.permissions import RuleRequiredMixin
 from apps.portfolio.forms import GiasUploadForm, SchoolForm, TrustForm
 from apps.portfolio.gias import run_import
-from apps.portfolio.models import GiasImport, School, Trust, Project
+from apps.portfolio.models import GiasImport, School, Trust
 from apps.portfolio.services import build_portfolio
+from apps.projects.models import Project
 
 class GiasImportView(RuleRequiredMixin, FormView):
     permission_rule = "can_manage_portfolio"

@@ -1,16 +1,20 @@
-{% extends "layouts/apps.html" %}
+{% extends "layouts/app.html" %}
 
 {% block title %}Portfolio{% endblock %}
 
 {% block content %}
-<div class="page-header mb-3">
-    <div>
-        <h1 class="page-title">Portfolio</h1>
-        <div class="text-secondary">Trusts and Schools with projects</div>
+<div class="page-header">
+    <div class="row align-items-center">
+        <div class="col">
+            <h1 class="page-title">Portfolio</h1>
+            <div class="text-secondary">Trusts and Schools with projects.</div>
+        </div>
+        {% if user.can_edit_project_data %}
+        <div class="col-auto ms-auto">
+            <a href="{% url 'project_customer' %}" class="btn btn-primary">Create project</a>
+        </div>
+        {% endif %}
     </div>
-    {% if user.can_edit_project_data %}
-    <a href="{% url 'project_customer' %}" class="btn btn-primary">Create project</a>
-    {% endif %}
 </div>
 
 {% if not has_projects %}
@@ -36,10 +40,20 @@
                     </tr>
                 </thead>
                 {% for row in rows %}
+                {% if row.trust %}
                 <tbody>
                     <tr>
                         <td>
-                            <button type="button" class="btn btn-ghost-secondary btn-icon bt-sm" data-bs-toggle="collapse" data-bs-target="#trust-{{ rwo.trust.pk }}" aria-label="Show schools in {{ row.name }}">›</button>
+                            <button 
+                                type="button" 
+                                class="btn btn-ghost-secondary btn-icon bt-sm" 
+                                data-toggle-schools="trust-{{ row.trust.pk }}"
+                                aria-expanded="{% if query %}true{% else %}false{% endif %}"
+                                aria-controls="trust-{{ row.trust.pk }}"
+                                aria-label="Show schools in {{ row.name }}"
+                                >
+                                    {% if query %}⌄{% else %}›{% endif %}
+                                </button>
                         </td>
                         <td>
                             <strong>{{ row.name }}</strong>
@@ -52,7 +66,7 @@
                         <td class="text-secondary">-</td>
                     </tr>
                 </tbody>
-                <tbody class="collapse{% if query %} show{% endif %}" id="trust-{{ row.trust.pk }}">
+                <tbody id="trust-{{ row.trust.pk }}" {% if not query %}hidden{% endif %}>
                     {% for child in row.schools %}
                         {% include "partials/_portfolio_school_row.html" with row=child indent=True %}
                     {% endfor %}
@@ -69,4 +83,15 @@
         </div>
     </div>
 {% endif %}
+<script>
+  document.querySelectorAll("[data-toggle-schools]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var schools = document.getElementById(button.dataset.toggleSchools);
+      var opening = schools.hidden;
+      schools.hidden = !opening;
+      button.setAttribute("aria-expanded", opening);
+      button.textContent = opening ? "⌄" : "›";
+    });
+  });
+</script>
 {% endblock %}

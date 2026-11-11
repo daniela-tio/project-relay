@@ -1,7 +1,8 @@
 """Copies GIAS rows into Project Relays own Trust and School records."""
 
 from dataclasses import dataclass, field
-from apps.portfolio.models import GiasEstablishment, School, Trust, GiasImport, Project, ProjectSchool
+from apps.portfolio.models import GiasEstablishment, School, Trust, GiasImport
+from apps.projects.models import Project, ProjectSchool
 
 def trust_from_gias(establishment):
     if establishment.trust_code is None:
@@ -84,42 +85,42 @@ class PortfolioRow:
             return self.school.dfe_number == dfe_query or query in self.school.postcode.lower()
         return self.trust.gias_code is not None and str(self.trust.gias_code) == query
     
-    def build_portfolio(query=""):
-        """Trusts and standalone schools that have projects."""
-        
-        active = Project.Status.ACTIVE 
-        trust_rows = {}
-        standalone_rows = {}
-        
-        for project in Project.objects.select_related("trust"):
-            if project.trust:
-                row = trust_rows.setdefault(
-                    project.trust.pk, PortfolioRow(name = project.trust.name, trust = project.trust)
-                )
-                row.active_projects += project.status == active
-                
-        for link in Projectschool.objects.select_related("school", "project__trust"):
-            school. project = link.school, link.project
-            if project.trust:
-                parent = trust_rows[project.trust.pk].children
-            else:
-                parent = standalone_rows
-            row = parent.setdefault(school.pk, PortfolioRow(name = school.name, school = school))       
+def build_portfolio(query=""):
+    """Trusts and standalone schools that have projects."""
+    
+    active = Project.Status.ACTIVE 
+    trust_rows = {}
+    standalone_rows = {}
+    
+    for project in Project.objects.select_related("trust"):
+        if project.trust:
+            row = trust_rows.setdefault(
+                project.trust.pk, PortfolioRow(name = project.trust.name, trust = project.trust)
+            )
             row.active_projects += project.status == active
             
-        rows = list(trust_rows.values()) + list(standalone_rows.values())
+    for link in ProjectSchool.objects.select_related("school", "project__trust"):
+        school, project = link.school, link.project
+        if project.trust:
+            parent = trust_rows[project.trust.pk].children
+        else:
+            parent = standalone_rows
+        row = parent.setdefault(school.pk, PortfolioRow(name = school.name, school = school))       
+        row.active_projects += project.status == active
         
-        query = query.strip().lower()
-        if query:
-            dfe_query = query.replace("/", "")
-            kept = []
-            for row in rows:
-                if row.matches(query, dfe_query):
+    rows = list(trust_rows.values()) + list(standalone_rows.values())
+    
+    query = query.strip().lower()
+    if query:
+        dfe_query = query.replace("/", "")
+        kept = []
+        for row in rows:
+            if row.matches(query, dfe_query):
+                kept.append(row)
+            elif row.trust:
+                matching = {pk: chile for pk, child in row.children.items() if child.matches(query, dfe_query)} 
+                if matching:
+                    row.children = matching
                     kept.append(row)
-                elif row.trust:
-                    matching = {pk: chile for pk, child in row.children.items() if child.matches(query, dfe_query)} 
-                    if matching:
-                        row.children = matching
-                        kept.append(row)
-            rows = kept
-        return sorted(rows, key = lambda row: row.name.lower())
+        rows = kept
+    return sorted(rows, key = lambda row: row.name.lower())

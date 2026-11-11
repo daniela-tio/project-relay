@@ -1,0 +1,46 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}New project{% endblock %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <h1 class="page-title">Create new project</h1>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if forms.errors %}
+    <div class="alert alert-danger" role="alert">Please fix the problems below.</div>
+    {% endif %}
+
+    <div class="card" style="max-width: 640px">
+        <div class="card-header"><h3 class="card-title">Who is this project for?</h3></div>
+        <div class="card-body">
+
+            <div class="mb-3">
+                {% for radio in form.customer_type %}
+                <label class="form-check">
+                    {{ radio.tag }}
+                    <span class="form-check-label">{{ radio.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            {% include "partials/_form_field.html" with field=form.trust %}
+
+            {% include "partials/_form_field.html" with field=form.dfe_number %}
+            <div class="form-hint mb-3">LA Code and establishment number, like 886/3412</div>
+            <div class="form-hint mb-3">
+                Not in GIAS?
+                <a href="{% url 'school_create' %}{% if form.dfe_number.value %}?dfe={{ form.dfe_number.value|urlencode }}{% endif %}">Add the school manually</a>.
+            </div>
+
+        </div>
+        <div class="card-footer text-end">
+            <a href="{% url 'home' %}" class="btn">Cancel</a>
+            <button type="submit" class="btn btn-primary">Continue</button>
+        </div>
+    </div>
+</form>
+{% endblock %}

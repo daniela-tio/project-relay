@@ -1,0 +1,38 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Add school{% endblock %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <h1 class="page-title">Add school</h1>
+    <div class="text-secondary">For schools not in GIAS</div>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+    {% if form.errors %}
+    <div class="alert alert-danger" role="alert"">Please fix the problems below.</div>
+    {% endif %}
+
+    <div class="card" style="max-width: 640px">
+        <div class="card-body">
+            {% include "partials/_form_field.html" with field=form.name %}
+            {% include "partials/_form_field.html" with field=form.dfe_number %}
+            {% include "partials/_form_field.html" with field=form.trust %}
+            <div class="form-hint mb-3">
+                Can't find it?
+                <a href="{% url 'trust_create' %}{% if form.dfe_number.value %}?dfe= {{ form.dfe_number.value|urlencode }}{% endif %}">Add trust</a>
+            </div>
+            {% include "partials/_form_field.html" with field=form.phase %}
+            <div class="row">
+                <div class="col">{% include "partials/_form_field.html" with field=form.town %}</div>
+                <div class="col">{% include "partials/_form_field.html" with field=form.postcode %}</div>
+            </div>
+        </div>
+        <div class="card-footer text-end">
+            <a href="{% url 'project_customer' %}" class="btn">Cancel</a>
+            <button type="submit" class="btn btn-primary">Add school</button>
+        </div>
+    </div>
+</form>
+{% endblock %}

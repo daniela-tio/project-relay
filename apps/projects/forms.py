@@ -5,8 +5,7 @@ from django.db.models import Q
 from apps.core.forms import TablerFormMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
 from apps.projects.models import Project
-
-DFE_ENTRY_PATTERN = r"^\d{3}/\d{4}$"
+from apps.portfolio.forms import DFE_ENTRY_PATTERN
 
 class ProjectCustomerForm(TablerFormMixin, forms.Form):
     """Choose Trust or a single school by DFE number"""

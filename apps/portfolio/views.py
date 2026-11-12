@@ -1,6 +1,7 @@
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
-from django.views.generic import FormView
+from django.views.generic import FormView, TemplateView
 from django.urls import reverse
 from django.views.generic import CreateView
 from urllib.parse import urlencode
@@ -8,6 +9,8 @@ from apps.accounts.permissions import RuleRequiredMixin
 from apps.portfolio.forms import GiasUploadForm, SchoolForm, TrustForm
 from apps.portfolio.gias import run_import
 from apps.portfolio.models import GiasImport, School, Trust
+from apps.portfolio.services import build_portfolio
+from apps.projects.models import Project
 
 class GiasImportView(RuleRequiredMixin, FormView):
     permission_rule = "can_manage_portfolio"
@@ -72,3 +75,16 @@ class TrustCreateView(RuleRequiredMixin, CreateView):
         if self.request.GET.get("dfe"):
             query["dfe"] = self.request.GET["dfe"]
         return redirect(f"{reverse('school_create')}?{urlencode(query)}")
+    
+class PortfolioView(LoginRequiredMixin, TemplateView):
+    
+    template_name = "portfolio/portfolio.html"
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = self.request.GET.get("q", "")
+        context["query"] = query
+        context["rows"] = build_portfolio(query)
+        context["has_projects"] = Project.objects.exists()
+        return context
+    

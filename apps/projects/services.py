@@ -3,7 +3,7 @@ from apps.portfolio.services import add_school_from_gias, trust_from_gias
 
 class ProjectCustomer:
     
-    def __init__(self, found, trust = None):
+    def __init__(self, found=None, trust = None):
         self.found = found
         if trust is not None:
             self.name = trust.name

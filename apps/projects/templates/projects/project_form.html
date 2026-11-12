@@ -6,7 +6,7 @@
 <div class="page-header mb-3">
     <h1 class="page-title">New Project</h1>
     <div class="text-secondary">
-        {% if customer.is_trust }
+        {% if customer.is_trust %}
             For {{ customer.name }}
         {% else %}    
             For {{ customer.name }} ({{ customer.formatted_dfe_number }}){% if customer.has_trust %} · {{ customer.trust_name }}{% endif %}

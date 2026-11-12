@@ -107,11 +107,11 @@ class TrustDetailView(LoginRequiredMixin, DetailView):
         context["tab"] = self.request.GET.get("tab", "overview")
         context["open_projects"] = projects.filter(status__in = OPEN_STATUSES)[:5]
         context["schools"] = (
-            School.objects.filter(project__trust = trust).distinct()
-            .annotate(project_count = Count("projects", filter = Q(projects__trust), distinct = True))
+            School.objects.filter(projects__trust = trust).distinct()
+            .annotate(project_count = Count("projects", filter = Q(projects__trust=trust), distinct = True))
             .order_by("name")
         )
-        contect["counts"] = {
+        context["counts"] = {
             "active": projects.filter(status = Project.Status.ACTIVE).count(),
             "planned": projects.filter(status = Project.Status.PLANNING).count(),
             "delivered": projects.filter(status = Project.Status.COMPLETED).count()
@@ -121,7 +121,7 @@ class TrustDetailView(LoginRequiredMixin, DetailView):
 class SchoolDetailView(LoginRequiredMixin, DetailView):
     """A schools details and projects."""
     
-    template_name = "portfolio/school_details.html"
+    template_name = "portfolio/school_detail.html"
     context_object_name = "school"
     
     def get_queryset(self):

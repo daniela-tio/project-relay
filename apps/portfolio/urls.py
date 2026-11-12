@@ -6,4 +6,6 @@ urlpatterns = [
     path("schools/new/", views.SchoolCreateView.as_view(), name="school_create"),
     path("trusts/new/", views.TrustCreateView.as_view(), name="trust_create"),
     path("portfolio/", views.PortfolioView.as_view(), name="portfolio"),
+    path("portfolio/trusts/<int:pk>/", views.TrustDetailView.as_view(), name="trust_detail"),
+    path("portfolio/schools/<int:pk>/", views.SchoolDetailView.as_view(), name="school_detail")
 ]

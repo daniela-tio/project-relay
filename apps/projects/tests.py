@@ -128,3 +128,37 @@ class NewProjectTests(TestCase):
         self.client.get(self.create_url(OPEN_ACADEMY))
         self.assertFalse(School.objects.exists())
         self.assertFalse(Trust.objects.exists())
+        
+    def trust_url(self, trust_id):
+        return f"{reverse('project_create')}?trust={trust_id}"
+
+    def make_trust(self):
+        return Trust.objects.create(
+            name=OPEN_ACADEMY["Trusts (name)"], gias_code=int(OPEN_ACADEMY["Trusts (code)"]),
+            trust_type=Trust.TrustType.MULTI_ACADEMY,
+        )
+
+    def test_trust_start_does_not_offer_single_school(self):
+        response = self.client.get(self.trust_url(self.make_trust().pk))
+        form = response.context["form"]
+        scopes = [value for value, _ in form.fields["scope"].choices]
+        self.assertNotIn(Project.Scope.SCHOOL, scopes)
+        self.assertEqual(form.fields["scope"].initial, Project.Scope.SELECTED)
+
+    def test_unknown_or_invalid_trust_goes_back_to_portfolio(self):
+        for trust_id in ("99999", "abc"):
+            with self.subTest(trust_id=trust_id):
+                self.assertRedirects(self.client.get(self.trust_url(trust_id)), reverse("portfolio"))
+
+    def test_trust_wide_project_from_a_trust_links_its_open_schools(self):
+        trust = self.make_trust()
+        self.client.post(self.trust_url(trust.pk), self.project_data(scope=Project.Scope.TRUST_WIDE))
+        project = Project.objects.get()
+        self.assertEqual(project.trust, trust)
+        linked = set(project.schools.values_list("dfe_number", flat=True))
+        self.assertEqual(linked, {dfe(OPEN_ACADEMY), dfe(SECOND_SCHOOL)})
+
+    def test_single_school_scope_is_refused_from_a_trust(self):
+        response = self.client.post(self.trust_url(self.make_trust().pk), self.project_data())
+        self.assertIn("scope", response.context["form"].errors)
+        self.assertFalse(Project.objects.exists())

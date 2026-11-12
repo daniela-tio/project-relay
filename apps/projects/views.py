@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from apps.accounts.permissions import RuleRequiredMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
 from apps.projects.forms import ProjectCustomerForm, ProjectForm
-from apps.projects.models import Project, ProjectSchool
+from apps.projects.models import Project, ProjectSchool, Trust
 from apps.projects.services import ProjectCustomer
 
 
@@ -28,6 +28,14 @@ class ProjectCreateView(RuleRequiredMixin, CreateView):
     template_name = "projects/project_form.html"
     
     def load_customer(self):
+        trust_id = self.request.GET.get("trust", "")
+        if trust_id:
+            trust = Trust.objects.filter(pk = trust_id).first() if trust_id.isdigit() else None
+            if trust is None:
+                messages.error(self.request, "That trust couldn't be found.")
+                return redirect("portfolio")
+            self.customer = ProjectCustomer(trust = trust)
+            return None 
         try:
             found = find_school_for_project(self.request.GET.get("school", ""))
         except SchoolLookupError as error:

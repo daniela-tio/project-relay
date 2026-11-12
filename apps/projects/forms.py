@@ -61,14 +61,21 @@ class ProjectForm(TablerFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.customer = customer
         
-        if customer.has_trust:
+        if customer.is_trust:
+            self.fields["scope"].choices = [
+                choice for choice in Project.Scope.choices if choice[0] != Project.Scope.SCHOOL
+            ]
+            self.fields["scope"].initial = Project.Scope.SELECTED
+            self.fields["selected_schools"].choices = customer.school_choices()
+        elif customer.has_trust:
             self.fields["scope"].choices = Project.Scope.choices
+            self.fields["scope"].initial = Project.Scope.SCHOOL
             self.fields["selected_schools"].choices = customer.school_choices()
             self.fields["selected_schools"].initial = [customer.dfe_number]
         else:
             self.fields["scope"].choices = [(Project.Scope.SCHOOL, Project.Scope.SCHOOL.label)]
+            self.fields["scope"].initial = Project.Scope.SCHOOL
             del self.fields["selected_schools"]
-        self.fields["scope"].initial = Project.Scope.SCHOOL
         
         User = get_user_model()
         self.fields["pm"].queryset = User.objects.filter(is_active = True).filter(

@@ -14,8 +14,8 @@ from urllib.parse import urlencode
 from unittest import mock
 from apps.portfolio.models import School, Trust, GiasEstablishment, GiasImport
 from apps.portfolio.gias import REQUIRED_COLUMNS, GiasFileError, file_date_from_name, load_establishments, run_import
-from apps.portfolio.services import add_school_from_gias
-
+from apps.portfolio.services import add_school_from_gias, build_portfolio
+from apps.projects.models import Project, ProjectSchool
 
 
 class SchoolModelTests(TestCase):
@@ -326,3 +326,114 @@ class ManualSchoolAndTrustTests(TestCase):
         School.objects.create(name = "Elmstead Primary", dfe_number = "3022002", is_manual = True)
         response = self.client.post(reverse("project_customer"), {"dfe_number": "302/2002"})
         self.assertRedirects(response, f"{reverse('project_create')}?school=3022002")       
+        
+class PortfolioTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.pm = User.objects.create_user(
+            "pm10", email="pm10@test.com", password="Print-Norm-1", role=User.Role.PROJECT_MANAGER
+        )
+        self.tech = User.objects.create_user(
+            "tech10", email="tech10@test.com", password="Eye-Fax-1", role=User.Role.TECHNICIAN
+        )
+        self.trust = Trust.objects.create(
+            name="Northfield Learning Trust", gias_code=5102, trust_type=Trust.TrustType.MULTI_ACADEMY
+        )
+        self.oakfield = School.objects.create(
+            name="Oakfield Primary", dfe_number="8862014", trust=self.trust, postcode="NF4 2HP"
+        )
+        self.riverside = School.objects.create(
+            name="Riverside Academy", dfe_number="8864021", trust=self.trust
+        )
+        self.beacon = School.objects.create(name="Beacon High", dfe_number="8874005")
+    
+    def make_project(self, schools = (), trust = None, status = Project.Status.PLANNING, scope = Project.Scope.SCHOOL):
+        project = Project.objects.create(
+            name = "Test Project", scope = scope, trust = trust, status = status, pm = self.pm, start_date = date(2027, 1 , 11), target_end_date = date(2027, 2 , 1)
+        )
+        for school in schools:
+            ProjectSchool.objects.create(project = project, school = school)
+        return project
+    
+    def names(self, rows):
+        return [row.name for row in rows]
+    
+    def test_every_role_can_view_the_portfolio(self):
+        for user in (self.pm, self.tech):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                self.assertEqual(self.client.get(reverse("portfolio")).status_code, 200)
+    
+    def test_signed_out_users_are_sent_to_sign_in(self):
+        response = self.client.get(reverse("portfolio"))
+        self.assertRedirects(response, f"{reverse('sign_in')}?next={reverse('portfolio')}")
+        
+    def test_create_project_button_only_for_pms_and_admins(self):
+        self.make_project([self.beacon])
+        self.client.force_login(self.pm)
+        self.assertContains(self.client.get(reverse("portfolio")), "Create project")
+        self.client.force_login(self.tech)
+        self.assertNotContains(self.client.get(reverse("portfolio")), "Create project")
+        
+    def test_empty_state_when_there_are_no_projects(self):
+        self.client.force_login(self.pm)
+        self.assertContains(self.client.get(reverse("portfolio")), "No projects yet")
+        
+    def test_only_trusts_and_schools_with_projects_are_listed(self):
+        self.make_project([self.oakfield], trust = self.trust)
+        rows = build_portfolio()
+        self.assertEqual(self.names(rows), ["Northfield Learning Trust"])
+        self.assertEqual(self.names(rows[0].schools), ["Oakfield Primary"])
+        
+    def tests_standalone_schools_sit_at_the_top_level(self):
+        self.make_project([self.oakfield], trust = self.trust)
+        self.make_project([self.beacon])
+        self.assertEqual(self.names(build_portfolio()), ["Beacon High", "Northfield Learning Trust"])
+        
+    def test_central_team_project_lists_the_trust_with_no_schools(self):
+        self.make_project(trust = self.trust, scope = Project.Scope.CENTRAL)
+        rows = build_portfolio()
+        self.assertEqual(self.names(rows), ["Northfield Learning Trust"])
+        self.assertEqual(rows[0].schools, [])
+        
+    def tests_projects_of_every_status_are_listed(self):
+        self.make_project([self.beacon], status = Project.Status.CANCELLED)
+        self.assertEqual(self.names(build_portfolio()), ["Beacon High"])
+        
+    def test_active_count_only_counts_active_projects(self):
+        self.make_project([self.oakfield], trust = self.trust, status = Project.Status.ACTIVE)
+        self.make_project([self.oakfield], trust = self.trust, status = Project.Status.PLANNING)
+        trust_row = build_portfolio()[0]
+        self.assertEqual(trust_row.active_projects, 1)
+        self.assertEqual(trust_row.schools[0].active_projects, 1)
+        
+    def test_closed_school_with_active_project_needs_attention(self):
+        self.beacon.status = School.Status.CLOSED
+        self.beacon.save()
+        self.make_project([self.beacon], status = Project.Status.ACTIVE)
+        self.assertTrue(build_portfolio()[0].needs_attention)
+        
+    def test_search_matches_names_dfe_numbers_postcodes_and_trust_codes(self):
+        self.make_project([self.oakfield, self.riverside], trust = self.trust)
+        self.make_project([self.beacon])
+        searches = {
+            "beacon": ["Beacon High"],
+            "886/2014": ["Northfield Learning Trust"],
+            "8862014": ["Northfield Learning Trust"],
+            "nf4 2hp": ["Northfield Learning Trust"],
+            "5102": ["Northfield Learning Trust"]
+        }
+        for query, expected in searches.items():
+            with self.subTest(query = query):
+                self.assertEqual(self.names(build_portfolio(query)), expected)
+                
+    def test_search_on_a_school_shows_only_that_school_under_its_trust(self):
+        self.make_project([self.oakfield, self.riverside], trust = self.trust)
+        rows = build_portfolio("riverside")
+        self.assertEqual(self.names(rows[0].schools), ["Riverside Academy"])
+        
+    def test_search_with_no_matches_says_so(self):
+        self.make_project([self.beacon])
+        self.client.force_login(self.pm)
+        response = self.client.get(reverse("portfolio"), {"q": "zzz"})
+        self.assertContains(response, "No trusts or schools match")

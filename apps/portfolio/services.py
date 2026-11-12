@@ -118,7 +118,7 @@ def build_portfolio(query=""):
             if row.matches(query, dfe_query):
                 kept.append(row)
             elif row.trust:
-                matching = {pk: chile for pk, child in row.children.items() if child.matches(query, dfe_query)} 
+                matching = {pk: child for pk, child in row.children.items() if child.matches(query, dfe_query)} 
                 if matching:
                     row.children = matching
                     kept.append(row)

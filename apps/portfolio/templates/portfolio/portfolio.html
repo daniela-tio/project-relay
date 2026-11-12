@@ -56,7 +56,7 @@
                                 </button>
                         </td>
                         <td>
-                            <strong>{{ row.name }}</strong>
+                            <a href="{% url 'trust_detail' row.trust.pk %}"><strong>{{ row.name }}</strong></a>
                             <div class="small text-secondary">Trust · {{ row.schools|length }} school{{ row.schools|length|pluralize }}</div>
                         </td>
                         <td>{{ row.trust.gias_code|default:"-" }}</td>
@@ -73,7 +73,7 @@
                 </tbody>
                 {% else %}
                 <tbody>
-                    {% include "partials/_portfolio_school_row.html" with row=child indent=True %}
+                    {% include "partials/_portfolio_school_row.html" with row=row indent=True %}
                 </tbody>
                 {% endif %}
             {% empty %}

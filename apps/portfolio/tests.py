@@ -437,3 +437,84 @@ class PortfolioTests(TestCase):
         self.client.force_login(self.pm)
         response = self.client.get(reverse("portfolio"), {"q": "zzz"})
         self.assertContains(response, "No trusts or schools match")
+        
+class TrustAndSchoolPageTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.pm = User.objects.create_user(
+            "pm11", email="pm11@test.com", password="Shelf-Fur-1", role=User.Role.PROJECT_MANAGER
+        )
+        self.tech = User.objects.create_user(
+            "tech11", email="tech11@test.com", password="Ballet-Duke-1", role=User.Role.TECHNICIAN
+        )
+        self.trust = Trust.objects.create(
+            name="Northfield Learning Trust", gias_code=5102, trust_type=Trust.TrustType.MULTI_ACADEMY
+        )
+        self.oakfield = School.objects.create(name="Oakfield Primary", dfe_number="8862014", trust=self.trust)
+        self.riverside = School.objects.create(name="Riverside Academy", dfe_number="8864021", trust=self.trust)
+        self.no_projects = School.objects.create(name="Quiet School", dfe_number="8869999", trust=self.trust)
+        self.client.force_login(self.pm)
+
+    def make_project(self, schools=(), status=Project.Status.PLANNING, scope=Project.Scope.SELECTED):
+        project = Project.objects.create(
+            name=f"Project {Project.objects.count() + 1}", scope=scope, trust=self.trust,
+            status=status, pm=self.pm, start_date=date(2027, 1, 11), target_end_date=date(2027, 2, 1),
+        )
+        for school in schools:
+            ProjectSchool.objects.create(project=project, school=school)
+        return project
+
+    def trust_url(self, tab="overview"):
+        return f"{reverse('trust_detail', args=[self.trust.pk])}?tab={tab}"
+
+    def test_every_role_can_view_trust_and_school_pages(self):
+        self.make_project([self.oakfield])
+        for user in (self.pm, self.tech):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                self.assertEqual(self.client.get(self.trust_url()).status_code, 200)
+                school_url = reverse("school_detail", args=[self.oakfield.pk])
+                self.assertEqual(self.client.get(school_url).status_code, 200)
+
+    def test_trust_and_school_without_projects_are_not_found(self):
+        self.assertEqual(self.client.get(self.trust_url()).status_code, 404)
+        school_url = reverse("school_detail", args=[self.no_projects.pk])
+        self.assertEqual(self.client.get(school_url).status_code, 404)
+
+    def test_schools_tab_lists_only_schools_with_this_trusts_projects(self):
+        self.make_project([self.oakfield])
+        self.make_project([self.oakfield, self.riverside])
+        schools = list(self.client.get(self.trust_url("schools")).context["schools"])
+        self.assertEqual([s.name for s in schools], ["Oakfield Primary", "Riverside Academy"])
+        self.assertEqual([s.project_count for s in schools], [2, 1])
+
+    def test_overview_counts_projects_by_status(self):
+        self.make_project([self.oakfield], status=Project.Status.ACTIVE)
+        self.make_project([self.oakfield], status=Project.Status.PLANNING)
+        self.make_project([self.oakfield], status=Project.Status.COMPLETED)
+        counts = self.client.get(self.trust_url()).context["counts"]
+        self.assertEqual(counts, {"active": 1, "planned": 1, "delivered": 1})
+
+    def test_central_only_trust_says_so_on_schools_tab(self):
+        self.make_project(scope=Project.Scope.CENTRAL)
+        self.assertContains(self.client.get(self.trust_url("schools")), "central team only")
+
+    def test_new_project_buttons_prefill_the_customer(self):
+        self.make_project([self.oakfield])
+        self.assertContains(self.client.get(self.trust_url()), f"?trust={self.trust.pk}")
+        school_page = self.client.get(reverse("school_detail", args=[self.oakfield.pk]))
+        self.assertContains(school_page, f"?school={self.oakfield.dfe_number}")
+
+    def test_technicians_do_not_see_new_project(self):
+        self.make_project([self.oakfield])
+        self.client.force_login(self.tech)
+        self.assertNotContains(self.client.get(self.trust_url()), "New project")
+
+    def test_closed_school_disables_new_project_and_warns_about_open_projects(self):
+        self.oakfield.status = School.Status.CLOSED
+        self.oakfield.save()
+        project = self.make_project([self.oakfield], status=Project.Status.ACTIVE)
+        response = self.client.get(reverse("school_detail", args=[self.oakfield.pk]))
+        self.assertNotContains(response, f"?school={self.oakfield.dfe_number}")
+        self.assertContains(response, "still include")
+        self.assertContains(response, project.name)

@@ -1,0 +1,4 @@
+{% if project.status == "active" %}<span class="badge bg-blue-lt">Active</span>
+{% elif project.status == "completed" %}<span class="badge bg-green-lt">Completed</span>
+{% elif project.status == "on_hold" %}<span class="badge bg-yellow-lt">On hold</span>
+{% else %}<span class="badge bg-secondary-lt">{{ project.get_status_display }}</span>{% endif %}

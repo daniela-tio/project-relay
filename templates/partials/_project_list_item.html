@@ -1,0 +1,10 @@
+<div class="list-group-item">
+  <div class="row align-items-center">
+    <div class="col">
+      <strong>{{ project.name }}</strong>
+      <span class="text-secondary small">· {{ project.get_scope_display }}</span>
+    </div>
+    <div class="col-auto">{% include "partials/_project_status_badge.html" %}</div>
+    <div class="col-auto small text-secondary">PM {{ project.pm.get_full_name|default:project.pm.username }}</div>
+  </div>
+</div>

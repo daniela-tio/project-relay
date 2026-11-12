@@ -3,8 +3,16 @@ from apps.portfolio.services import add_school_from_gias, trust_from_gias
 
 class ProjectCustomer:
     
-    def __init__(self, found):
+    def __init__(self, found=None, trust = None):
         self.found = found
+        if trust is not None:
+            self.name = trust.name
+            self.dfe_number = None
+            self.trust = trust
+            self.trust_code = trust.gias_code
+            self.trust_name = trust.name
+            return
+        
         self.name = found.name
         self.dfe_number = found.dfe_number
         if isinstance(found, School):
@@ -17,7 +25,11 @@ class ProjectCustomer:
                 Trust.objects.filter(gias_code = found.trust_code).first() if found.trust_code else None
             )
             self.trust_name = found.trust_name
-            
+    
+    @property
+    def is_trust(self):
+        return self.found is None
+    
     @property
     def formatted_dfe_number(self):
         return f"{self.dfe_number[:3]}/{self.dfe_number[3:]}"

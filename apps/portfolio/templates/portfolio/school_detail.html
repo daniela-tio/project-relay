@@ -1,0 +1,83 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}{{ school.name }}{% endblock %}
+
+{% block content %}
+<ol class="breadcrumb mb-2">
+  <li class="breadcrumb-item"><a href="{% url 'portfolio' %}">Portfolio</a></li>
+  {% if school.trust and school.trust.projects.exists %}
+  <li class="breadcrumb-item"><a href="{% url 'trust_detail' school.trust.pk %}">{{ school.trust.name }}</a></li>
+  {% endif %}
+  <li class="breadcrumb-item active" aria-current="page">{{ school.name }}</li>
+</ol>
+
+<div class="page-header mb-3">
+  <div class="row align-items-center">
+    <div class="col">
+      {% if school.trust %}<div class="small text-secondary">{{ school.trust.name }}</div>{% endif %}
+      <h1 class="page-title">
+        {{ school.name }}
+        <span class="ms-2">{% include "partials/_school_status_badge.html" %}</span>
+        <span class="badge bg-secondary-lt ms-1">{% if school.is_manual %}Manual{% else %}GIAS{% endif %}</span>
+      </h1>
+    </div>
+    {% if user.can_edit_project_data %}
+    <div class="col-auto ms-auto">
+      {% if school.status == "closed" %}
+        <button type="button" class="btn btn-primary" disabled title="Closed schools can't be added to new projects.">New project</button>
+      {% else %}
+        <a href="{% url 'project_create' %}?school={{ school.dfe_number }}" class="btn btn-primary">New project</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% if school.status == "closed" and open_projects %}
+  <div class="text-danger small mt-2">
+    {{ open_projects|length }} open project{{ open_projects|length|pluralize }} still include{{ open_projects|length|pluralize:"s," }} this school:
+    {% for project in open_projects %}{{ project.name }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+  </div>
+  {% endif %}
+</div>
+
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link{% if tab == 'overview' %} active{% endif %}" href="?tab=overview">Overview</a></li>
+  <li class="nav-item"><a class="nav-link{% if tab == 'projects' %} active{% endif %}" href="?tab=projects">Projects <span class="badge ms-1">{{ projects|length }}</span></a></li>
+</ul>
+
+{% if tab == "projects" %}
+  {% include "partials/_project_table.html" %}
+{% else %}
+  <div class="row row-cards">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">School details</h3></div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-5">DFE number</dt><dd class="col-7">{{ school.formatted_dfe_number }}</dd>
+            <dt class="col-5">URN</dt><dd class="col-7">{{ school.urn|default:"—" }}</dd>
+            <dt class="col-5">Phase</dt><dd class="col-7">{{ school.phase|default:"—" }}</dd>
+            <dt class="col-5">Town</dt><dd class="col-7">{{ school.town|default:"—" }}</dd>
+            <dt class="col-5">Postcode</dt><dd class="col-7">{{ school.postcode|default:"—" }}</dd>
+            <dt class="col-5">Source</dt><dd class="col-7 mb-0">{% if school.is_manual %}Manual{% else %}GIAS{% endif %}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Active and planned projects</h3>
+          <div class="card-actions"><a href="?tab=projects">All projects</a></div>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for project in open_projects %}
+            {% include "partials/_project_list_item.html" %}
+          {% empty %}
+            <div class="list-group-item text-secondary">No active projects at this school.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

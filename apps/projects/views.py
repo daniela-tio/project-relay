@@ -1,7 +1,8 @@
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.views.generic import FormView, CreateView
+from django.views.generic import FormView, CreateView, DetailView
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from urllib.parse import urlencode
 from apps.accounts.permissions import RuleRequiredMixin
@@ -81,4 +82,11 @@ class ProjectCreateView(RuleRequiredMixin, CreateView):
             ProjectSchool.objects.create(project = project, school = self.customer.save_school(dfe_number))
             
         messages.success(self.request, "Project created.")
-        return redirect("home")
+        return redirect("project_detail", pk = project.pk)
+    
+class ProjectDetailView(LoginRequiredMixin, DetailView):
+    model = Project
+    template_name = "projects/project_detail.html"
+    
+    def get_queryset(self):
+        return Project.objects.select_related("trust", "pm").prefetch_related("schools")

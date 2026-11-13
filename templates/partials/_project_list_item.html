@@ -1,7 +1,7 @@
 <div class="list-group-item">
   <div class="row align-items-center">
     <div class="col">
-      <strong>{{ project.name }}</strong>
+      <a href="{% url 'project_detail' project.pk %}"><strong>{{ project.name }}</strong></a>
       <span class="text-secondary small">· {{ project.get_scope_display }}</span>
     </div>
     <div class="col-auto">{% include "partials/_project_status_badge.html" %}</div>

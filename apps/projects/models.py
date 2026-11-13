@@ -86,6 +86,14 @@ class Project(models.Model):
             return "Reopen this project? It goes back to Planning and becomes editable again."
         return None
     
+    @property
+    def halo_links(self):
+        return [
+            ("Opportunity", self.halo_opportunity_url),
+            ("Pre-sales", self.halo_presales_url),
+            ("Project", self.halo_project_url)
+        ]
+    
 class ProjectSchool(models.Model):
     """Links a project to a school."""
     

@@ -4,6 +4,7 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, FormView, ListView, UpdateView
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.messages.views import SuccessMessageMixin
+from django.db.models import ProtectedError
 from apps.accounts.forms import SignInForm, UserCreateForm, UserSetPasswordForm, UserUpdateForm, is_last_active_admin
 from apps.accounts.models import User
 from apps.accounts.permissions import RuleRequiredMixin
@@ -98,7 +99,16 @@ class UserDeleteView(RuleRequiredMixin, DeleteView):
         if self.object.is_administrator and is_last_active_admin(self.object):
             messages.error(self.request, "The only active administrator cannot be deleted.")
             return redirect("user_list")
+        try:
+            response = super().form_valid(form)
+        except ProtectedError:
+            messages.error(
+                self.request,
+                f"{self.object.get_full_name() or self.object.username} is assigned to one or more projects. "
+                "Reassign their projects, or deactivate their account instead."
+            )
+            return redirect("user_list")
         messages.success(self.request, f"User {self.object.username} was deleted.")
-        return super().form_valid(form)
+        return response
     
             

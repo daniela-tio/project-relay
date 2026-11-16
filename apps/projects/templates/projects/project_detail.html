@@ -29,7 +29,10 @@
       </h1>
     </div>
     {% if user.can_edit_project_data %}
-    <div class="col-auto ms-auto">
+    <div class="col-auto ms-auto d-flex gap-2">
+      {% if not project.is_read_only %}
+      <a href="{% url 'project_update' project.pk %}" class="btn">Edit project</a>
+      {% endif %}
       <div class="dropdown">
         <button type="button" class="btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
           Change status

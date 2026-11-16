@@ -122,3 +122,26 @@ class ProjectSchool(models.Model):
         constraints = [
             models.UniqueConstraint(fields = ["project", "school"], name = "project_school_unique"),
         ]
+        
+class ProjectMember(models.Model):
+    """member of the project team."""
+    
+    class Role(models.TextChoices):
+        TECH_LEAD = "tech_lead", "Tech Lead"
+        TECH = "tech", "Tech"
+        
+    project = models.ForeignKey(Project, on_delete = models.CASCADE, related_name = "members")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete = models.PROTECT, related_name = "project_memberships"
+    )
+    role = models.CharField(max_length = 20, choices = Role.choices)
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields = ["project", "user"], name = "project_member_unique"),
+            models.UniqueConstraint(fields = ["project"], condition = Q(role = "tech_lead"), name = "project_one_tech_lead")
+        ]
+    
+    def __str__(self):
+        return f"{self.user} ({self.get_role_display()}) on {self.project}"
+        

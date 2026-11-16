@@ -94,7 +94,7 @@ class Project(models.Model):
             if self.is_read_only:
                 label = "Reopen project"
             elif status == self.Status.CANCELLED:
-                label = "Cancel Project"
+                label = "Cancel project"
             else:
                 label = status.label
             options.append({

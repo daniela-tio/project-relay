@@ -1,10 +1,11 @@
+from datetime import date
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from apps.portfolio.gias import run_import
 from apps.portfolio.models import School, Trust
 from apps.portfolio.tests import OPEN_ACADEMY, make_gias_csv
-from apps.projects.models import Project
+from apps.projects.models import Project, ProjectSchool
 
 def dfe(row):
     return row["LA (code)"] + row["EstablishmentNumber"]
@@ -162,3 +163,157 @@ class NewProjectTests(TestCase):
         response = self.client.post(self.trust_url(self.make_trust().pk), self.project_data())
         self.assertIn("scope", response.context["form"].errors)
         self.assertFalse(Project.objects.exists())
+        
+class ProjectStatusRuleTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.pm = User.objects.create_user(
+            "pm12", email = "pm12@test.com", password = "Safari-Fantasy-1", role = User.Role.PROJECT_MANAGER
+        )
+        self.project = Project.objects.create(
+            name = "Wifi refresh", scope = Project.Scope.SCHOOL, pm = self.pm, start_date = date(2027, 1, 11), target_end_date = date(2027, 2, 1)
+        )
+        
+    def test_allowed_moves_from_each_status(self):
+        S = Project.Status
+        expected = {
+            S.PLANNING: [S.ACTIVE, S.CANCELLED],
+            S.ACTIVE: [S.ON_HOLD, S.AWAITING_SIGN_OFF, S.CANCELLED],
+            S.ON_HOLD: [S.ACTIVE, S.CANCELLED],
+            S.AWAITING_SIGN_OFF: [S.ACTIVE],
+            S.COMPLETED: [S.ACTIVE],
+            S.CANCELLED: [S.PLANNING],
+        }
+        for status, moves in expected.items():
+            with self.subTest(status = status):
+                self.project.status = status
+                self.assertEqual(self.project.next_statuses(), moves)
+                
+    def test_allowed_move_changes_status(self):
+        self.project.move_to(Project.Status.ACTIVE)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, Project.Status.ACTIVE)
+        
+    def test_illegal_move_is_refused(self):
+        with self.assertRaisesMessage(ValueError, "cannot move from Planning to Completed"):
+            self.project.move_to(Project.Status.COMPLETED)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, Project.Status.PLANNING)
+        
+    def test_unknown_status_is_refused(self):
+        with self.assertRaisesMessage(ValueError, "That is not a valid project status."):
+            self.project.move_to("rabbit")
+            
+    def test_only_completed_cancelled_are_read_only(self):
+        for status in Project.Status:
+            with self.subTest(status = status):
+                self.project.status = status
+                expected = status in (Project.Status.COMPLETED, Project.Status.CANCELLED)
+                self.assertEqual(self.project.is_read_only, expected)
+    
+    def test_cancel_and_reopen_ask_for_confirmation(self):
+        self.assertIn("Cancel this project?", self.project.confirmation_for(Project.Status.CANCELLED))
+        self.assertIsNone(self.project.confirmation_for(Project.Status.ACTIVE))
+        self.project.status = Project.Status.COMPLETED
+        self.assertIn("sign-off is kept", self.project.confirmation_for(Project.Status.ACTIVE))
+        self.project.status = Project.Status.CANCELLED
+        self.assertIn("goes back to Planning", self.project.confirmation_for(Project.Status.PLANNING))
+        
+class ProjectPageTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.pm = User.objects.create_user(
+            "pm13", email="pm13@test.com", password="Sleep-Floor-1", role=User.Role.PROJECT_MANAGER
+        )
+        self.tech = User.objects.create_user(
+            "tech13", email="tech13@test.com", password="Testify-Panel-1", role=User.Role.TECHNICIAN
+        )
+        self.school = School.objects.create(name="Beacon High", dfe_number="8874005")
+        self.project = Project.objects.create(
+            name="Wi-Fi Refresh", scope=Project.Scope.SCHOOL, pm=self.pm,
+            start_date=date(2027, 1, 11), target_end_date=date(2027, 2, 1),
+        )
+        ProjectSchool.objects.create(project=self.project, school=self.school)
+        self.client.force_login(self.pm)
+
+    def detail_url(self):
+        return reverse("project_detail", args=[self.project.pk])
+
+    def status_url(self):
+        return reverse("project_status", args=[self.project.pk])
+
+    def edit_url(self):
+        return reverse("project_update", args=[self.project.pk])
+
+    def edit_data(self, **changes):
+        data = {"name": "Wi-Fi Refresh", "start_date": "2027-01-11",
+                "target_end_date": "2027-02-01", "pm": self.pm.pk}
+        data.update(changes)
+        return data
+
+    def test_every_role_can_view_a_project(self):
+        for user in (self.pm, self.tech):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                self.assertContains(self.client.get(self.detail_url()), "Wi-Fi Refresh")
+
+    def test_missing_project_is_not_found(self):
+        self.assertEqual(self.client.get(reverse("project_detail", args=[99999])).status_code, 404)
+
+    def test_technicians_see_no_edit_or_status_controls(self):
+        self.client.force_login(self.tech)
+        response = self.client.get(self.detail_url())
+        self.assertNotContains(response, "Change status")
+        self.assertNotContains(response, "Edit project")
+
+    def test_pm_can_change_status(self):
+        response = self.client.post(self.status_url(), {"status": Project.Status.ACTIVE}, follow=True)
+        self.assertContains(response, "Project status changed to Active.")
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, Project.Status.ACTIVE)
+
+    def test_illegal_move_shows_an_error(self):
+        response = self.client.post(self.status_url(), {"status": Project.Status.COMPLETED}, follow=True)
+        self.assertContains(response, "cannot move from Planning to Completed")
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, Project.Status.PLANNING)
+
+    def test_technicians_cannot_change_status(self):
+        self.client.force_login(self.tech)
+        response = self.client.post(self.status_url(), {"status": Project.Status.ACTIVE})
+        self.assertEqual(response.status_code, 403)
+
+    def test_status_cannot_be_changed_with_get(self):
+        self.assertEqual(self.client.get(self.status_url()).status_code, 405)
+
+    def test_pm_can_edit_project_details(self):
+        response = self.client.post(self.edit_url(), self.edit_data(name="Wi-Fi Upgrade"))
+        self.assertRedirects(response, self.detail_url())
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.name, "Wi-Fi Upgrade")
+
+    def test_edit_refuses_end_date_before_start(self):
+        response = self.client.post(self.edit_url(), self.edit_data(target_end_date="2027-01-01"))
+        self.assertIn("target_end_date", response.context["form"].errors)
+
+    def test_read_only_project_cannot_be_edited(self):
+        self.project.status = Project.Status.CANCELLED
+        self.project.save()
+        response = self.client.post(self.edit_url(), self.edit_data(name="Changed"), follow=True)
+        self.assertContains(response, "Reopen this project before editing it.")
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.name, "Wi-Fi Refresh")
+
+    def test_technicians_cannot_edit(self):
+        self.client.force_login(self.tech)
+        self.assertEqual(self.client.get(self.edit_url()).status_code, 403)
+
+    def test_edit_keeps_a_pm_whose_role_has_since_changed(self):
+        self.pm.role = get_user_model().Role.TECHNICIAN
+        self.pm.save()
+        self.client.force_login(get_user_model().objects.create_user(
+            "admin13", email="admin13@test.com", password="Bright-Kite-1",
+            role=get_user_model().Role.ADMINISTRATOR,
+        ))
+        response = self.client.post(self.edit_url(), self.edit_data(name="Still saves"))
+        self.assertRedirects(response, self.detail_url())

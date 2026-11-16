@@ -1,6 +1,6 @@
-from django.shortcuts import redirect
+from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse
-from django.views.generic import FormView, CreateView, DetailView
+from django.views.generic import FormView, CreateView, DetailView, View 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
@@ -90,3 +90,18 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
     
     def get_queryset(self):
         return Project.objects.select_related("trust", "pm").prefetch_related("schools")
+    
+class ProjectStatusView(RuleRequiredMixin, View):
+    
+    permission_rule = "can_edit_project_data"
+    http_method_names = ["post"]
+    
+    def post(self, request, pk):
+        project = get_object_or_404(Project, pk = pk)
+        try:
+            project.move_to(request.POST.get("status", ""))
+        except ValueError as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, f"Project status changed to {project.get_status_display()}.")
+        return redirect("project_detail", pk = project.pk) 

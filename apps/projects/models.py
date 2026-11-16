@@ -63,13 +63,15 @@ class Project(models.Model):
         return self.name
     
     def next_statuses(self):
-        return self.ALLOWED_MOVES(self.status)
+        return self.ALLOWED_MOVES[self.status]
     
     @property
     def is_read_only(self):
         return self.status in (self.Status.COMPLETED, self.Status.CANCELLED)
     
     def move_to(self, status):
+        if status not in self.Status.values:
+            raise ValueError("That is not a valid project status.")
         if status not in self.next_statuses():
             raise ValueError(
                 f"A project cannot move from {self.get_status_display()} to {self.Status(status).label}."
@@ -85,6 +87,22 @@ class Project(models.Model):
         if self.status == self.Status.CANCELLED:
             return "Reopen this project? It goes back to Planning and becomes editable again."
         return None
+    
+    def status_options(self):
+        options = []
+        for status in self.next_statuses():
+            if self.is_read_only:
+                label = "Reopen project"
+            elif status == self.Status.CANCELLED:
+                label = "Cancel Project"
+            else:
+                label = status.label
+            options.append({
+                "value": status.value,
+                "label": label,
+                "confirmation": self.confirmation_for(status)
+            })
+        return options
     
     @property
     def halo_links(self):

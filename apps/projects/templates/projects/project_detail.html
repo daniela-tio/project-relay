@@ -28,6 +28,28 @@
         <span class="ms-2">{% include "partials/_project_status_badge.html" %}</span>
       </h1>
     </div>
+    {% if user.can_edit_project_data %}
+    <div class="col-auto ms-auto">
+      <div class="dropdown">
+        <button type="button" class="btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+          Change status
+        </button>
+        <div class="dropdown-menu dropdown-menu-end">
+          {% for option in project.status_options %}
+            {% if option.confirmation %}
+              <button type="button" class="dropdown-item"
+                      data-bs-toggle="modal" data-bs-target="#confirm-{{ option.value }}">{{ option.label }}</button>
+            {% else %}
+              <form method="post" action="{% url 'project_status' project.pk %}">
+                {% csrf_token %}
+                <button type="submit" name="status" value="{{ option.value }}" class="dropdown-item">{{ option.label }}</button>
+              </form>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -81,5 +103,31 @@
     </div>
   </div>
 </div>
+{% if user.can_edit_project_data %}
+  {% for option in project.status_options %}
+    {% if option.confirmation %}
+    <div class="modal modal-blur fade" id="confirm-{{ option.value }}" tabindex="-1"
+         aria-labelledby="confirm-{{ option.value }}-title" aria-hidden="true">
+      <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-body">
+            <h3 class="modal-title" id="confirm-{{ option.value }}-title">{{ option.label }}?</h3>
+            <p class="text-secondary mb-0">{{ option.confirmation }}</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Go back</button>
+            <form method="post" action="{% url 'project_status' project.pk %}">
+              {% csrf_token %}
+              <button type="submit" name="status" value="{{ option.value }}"
+                      class="btn {% if option.value == 'cancelled' %}btn-danger{% else %}btn-primary{% endif %}">{{ option.label }}</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
 {% endwith %}
 {% endblock %}

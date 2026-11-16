@@ -54,6 +54,19 @@
         <div class="card-header"><h3 class="card-title">People</h3></div>
         <div class="card-body">
           {% include "partials/_form_field.html" with field=form.pm %}
+
+          {% include "partials/_form_field.html" with field=form.tech_lead %}
+          <div class="mb-3">
+            <div class="form-label">{{ form.team.label }}</div>
+            {% for checkbox in form.team %}
+            <label class="form-check">
+              {{ checkbox.tag }}
+              <span class="form-check-label">{{ checkbox.choice_label }}</span>
+            </label>
+            {% empty %}
+            <div class="text-secondary small">No technicians yet.</div>
+            {% endfor %}
+          </div>
         </div>
       </div>
     </div>

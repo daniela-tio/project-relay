@@ -112,6 +112,15 @@ class Project(models.Model):
             ("Project", self.halo_project_url)
         ]
     
+    @property
+    def tech_lead(self):
+        return next((m.user for m in self.members.all() if m.role == "tech_lead"), None)
+    
+    @property
+    def techs(self):
+        users = [m.user for m in self.members.all() if m.role == "tech"]
+        return sorted(users, key=lambda user: (user.get_full_name() or user.username).lower())
+    
 class ProjectSchool(models.Model):
     """Links a project to a school."""
     

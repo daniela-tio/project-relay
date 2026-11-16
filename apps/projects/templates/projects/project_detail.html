@@ -72,7 +72,14 @@
           <dt class="col-4">Dates</dt>
           <dd class="col-8">{{ project.start_date|date:"D j M Y" }} – {{ project.target_end_date|date:"D j M Y" }}</dd>
           <dt class="col-4">PM</dt>
-          <dd class="col-8 mb-0">{{ project.pm.get_full_name|default:project.pm.username }}</dd>
+          <dd class="col-8">{{ project.pm.get_full_name|default:project.pm.username }}</dd>
+          <dt class="col-4">Tech Lead</dt>
+          <dd class="col-8">{% if project.tech_lead %}{{ project.tech_lead.get_full_name|default:project.tech_lead.username }}{% else %}<span class="text-secondary">None yet</span>{% endif %}</dd>
+          <dt class="col-4">Team</dt>
+          <dd class="col-8 mb-0">
+            {% for tech in project.techs %}{{ tech.get_full_name|default:tech.username }}{% if not forloop.last %}, {% endif %}
+            {% empty %}<span class="text-secondary">No techs yet</span>{% endfor %}
+          </dd>
         </dl>
       </div>
     </div>

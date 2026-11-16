@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from apps.core.forms import TablerFormMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
-from apps.projects.models import Project
+from apps.projects.models import Project, ProjectMember
 from apps.portfolio.forms import DFE_ENTRY_PATTERN
 
 class ProjectCustomerForm(TablerFormMixin, forms.Form):
@@ -29,6 +29,13 @@ class ProjectCustomerForm(TablerFormMixin, forms.Form):
 
 class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
     """Fields used to create and edit a project."""
+    
+    tech_lead = forms.ModelChoiceField(
+        queryset = None, required = False, label = "Tech Lead", empty_label = "No Tech Lead"
+    )
+    team = forms.ModelMultipleChoiceField(
+        queryset = None, required = False, label = "Team", widget = forms.CheckboxSelectMultiple
+    )
 
     class Meta:
         model = Project
@@ -71,6 +78,24 @@ class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
 
         for name in ["halo_opportunity_url", "halo_presales_url", "halo_project_url"]:
             self.fields[name].error_messages["invalid"] = "Enter a full web address starting with https://"
+            
+        current = []
+        if self.instance.pk:
+            members = list(self.instance.members.all())
+            current = [member.user_id for member in members]
+            self.fields["tech_lead"].initial = next(
+                (m.user_id for m in members if m.role == ProjectMember.Role.TECH_LEAD), None
+            )
+            self.fields["team"].initial = [
+                m.user_id for m in members if m.role == ProjectMember.Role.TECH 
+            ]
+        active = Q(is_active = True) | Q(pk__in = current)
+        self.fields["tech_lead"].queryset = User.objects.filter(active).order_by("first_name", "username")
+        self.fields["team"].queryset = User.objects.filter(
+            (Q(is_active=True) & Q(role=User.Role.TECHNICIAN)) | Q(pk__in=current)
+        ).order_by("first_name", "username")
+        for name in ("tech_lead", "team"):
+            self.fields[name].label_from_instance = lambda person: person.get_full_name() or person.username
 
     def clean(self):
         cleaned = super().clean()
@@ -78,6 +103,17 @@ class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
         if start and end and end < start:
             self.add_error("target_end_date", "Target end date must be on or after the start date.")
         return cleaned
+    
+    def save_members(self, project):
+        tech_lead = self.cleaned_data.get("tech_lead")
+        members = []
+        if tech_lead:
+            members.append(ProjectMember(project = project, user = tech_lead, role = ProjectMember.Role.TECH_LEAD))
+        for user in self.cleaned_data.get("team", []):
+            if user != tech_lead:
+                members.append(ProjectMember(project = project, user = user, role = ProjectMember.Role.TECH))
+        project.members.all().delete()
+        ProjectMember.objects.bulk_create(members)     
 
 
 class ProjectForm(ProjectDetailsForm):

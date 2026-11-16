@@ -1,12 +1,14 @@
-from django.shortcuts import redirect
+from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse
-from django.views.generic import FormView, CreateView
+from django.views.generic import FormView, CreateView, UpdateView, DetailView, View 
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
+from django.contrib.messages.views import SuccessMessageMixin
 from urllib.parse import urlencode
 from apps.accounts.permissions import RuleRequiredMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
-from apps.projects.forms import ProjectCustomerForm, ProjectForm
+from apps.projects.forms import ProjectCustomerForm, ProjectForm, ProjectEditForm
 from apps.projects.models import Project, ProjectSchool, Trust
 from apps.projects.services import ProjectCustomer
 
@@ -81,4 +83,51 @@ class ProjectCreateView(RuleRequiredMixin, CreateView):
             ProjectSchool.objects.create(project = project, school = self.customer.save_school(dfe_number))
             
         messages.success(self.request, "Project created.")
-        return redirect("home")
+        return redirect("project_detail", pk = project.pk)
+    
+class ProjectDetailView(LoginRequiredMixin, DetailView):
+    model = Project
+    template_name = "projects/project_detail.html"
+    
+    def get_queryset(self):
+        return Project.objects.select_related("trust", "pm").prefetch_related("schools")
+    
+class ProjectStatusView(RuleRequiredMixin, View):
+    
+    permission_rule = "can_edit_project_data"
+    http_method_names = ["post"]
+    
+    def post(self, request, pk):
+        project = get_object_or_404(Project, pk = pk)
+        try:
+            project.move_to(request.POST.get("status", ""))
+        except ValueError as error:
+            messages.error(request, str(error))
+        else:
+            messages.success(request, f"Project status changed to {project.get_status_display()}.")
+        return redirect("project_detail", pk = project.pk) 
+    
+class ProjectUpdateView(RuleRequiredMixin, SuccessMessageMixin, UpdateView):
+    """Edit project view"""
+    
+    permission_rule = "can_edit_project_data"
+    model = Project
+    form_class = ProjectEditForm
+    template_name = "projects/project_edit.html"
+    success_message = "Project Updated"
+    
+    def refuse_if_read_only(self):
+        project = self.get_object()
+        if project.is_read_only:
+            messages.error(self.request, "Reopen this project before editing it.")
+            return redirect("project_detail", pk = project.pk)
+        return None
+    
+    def get(self, request, *args, **kwargs):
+        return self.refuse_if_read_only() or super().get(request, *args, **kwargs)
+    
+    def post(self, request, *args, **kwargs):
+        return self.refuse_if_read_only() or super().post(request, *args, **kwargs)
+    
+    def get_success_url(self):
+        return reverse("project_detail", args=[self.object.pk])

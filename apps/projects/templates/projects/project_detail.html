@@ -1,0 +1,136 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+{% with schools=project.schools.all %}
+<ol class="breadcrumb mb-2">
+  <li class="breadcrumb-item"><a href="{% url 'portfolio' %}">Portfolio</a></li>
+  {% if project.trust %}
+    <li class="breadcrumb-item"><a href="{% url 'trust_detail' project.trust.pk %}">{{ project.trust.name }}</a></li>
+  {% elif schools %}
+    <li class="breadcrumb-item"><a href="{% url 'school_detail' schools.0.pk %}">{{ schools.0.name }}</a></li>
+  {% endif %}
+  <li class="breadcrumb-item active" aria-current="page">{{ project.name }}</li>
+</ol>
+
+<div class="page-header mb-3">
+  <div class="row align-items-center">
+    <div class="col">
+      <div class="small text-secondary">
+        {% if project.trust %}{{ project.trust.name }}{% elif schools %}{{ schools.0.name }}{% endif %}
+        {% if project.scope == "trust_wide" %}<span class="badge bg-secondary-lt ms-1">Trust-wide · {{ schools|length }} school{{ schools|length|pluralize }}</span>
+        {% elif project.scope == "selected" %}<span class="badge bg-secondary-lt ms-1">Selected schools · {{ schools|length }}</span>
+        {% elif project.scope == "central" %}<span class="badge bg-secondary-lt ms-1">Trust central team only</span>{% endif %}
+      </div>
+      <h1 class="page-title mt-1">
+        {{ project.name }}
+        <span class="ms-2">{% include "partials/_project_status_badge.html" %}</span>
+      </h1>
+    </div>
+    {% if user.can_edit_project_data %}
+    <div class="col-auto ms-auto d-flex gap-2">
+      {% if not project.is_read_only %}
+      <a href="{% url 'project_update' project.pk %}" class="btn">Edit project</a>
+      {% endif %}
+      <div class="dropdown">
+        <button type="button" class="btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+          Change status
+        </button>
+        <div class="dropdown-menu dropdown-menu-end">
+          {% for option in project.status_options %}
+            {% if option.confirmation %}
+              <button type="button" class="dropdown-item"
+                      data-bs-toggle="modal" data-bs-target="#confirm-{{ option.value }}">{{ option.label }}</button>
+            {% else %}
+              <form method="post" action="{% url 'project_status' project.pk %}">
+                {% csrf_token %}
+                <button type="submit" name="status" value="{{ option.value }}" class="dropdown-item">{{ option.label }}</button>
+              </form>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row row-cards">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Progress</h3></div>
+      <div class="card-body text-secondary">No tasks yet.</div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header"><h3 class="card-title">Details</h3></div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-4">Dates</dt>
+          <dd class="col-8">{{ project.start_date|date:"D j M Y" }} – {{ project.target_end_date|date:"D j M Y" }}</dd>
+          <dt class="col-4">PM</dt>
+          <dd class="col-8 mb-0">{{ project.pm.get_full_name|default:project.pm.username }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    {% if project.scope != "school" %}
+    <div class="card mb-3">
+      <div class="card-header">
+        <h3 class="card-title">Schools in scope</h3>
+        <div class="card-actions text-secondary small">{{ schools|length }}</div>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for school in schools %}
+          <a href="{% url 'school_detail' school.pk %}" class="list-group-item list-group-item-action">{{ school.name }}</a>
+        {% empty %}
+          <div class="list-group-item text-secondary">This project is for the trust’s central team.</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Halo links</h3></div>
+      <div class="list-group list-group-flush">
+        {% for label, url in project.halo_links %}
+          <div class="list-group-item d-flex justify-content-between">
+            <span class="text-secondary">{{ label }}</span>
+            {% if url %}<a href="{{ url }}" target="_blank" rel="noopener noreferrer">Open ↗</a>{% else %}<span class="text-secondary">—</span>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% if user.can_edit_project_data %}
+  {% for option in project.status_options %}
+    {% if option.confirmation %}
+    <div class="modal modal-blur fade" id="confirm-{{ option.value }}" tabindex="-1"
+         aria-labelledby="confirm-{{ option.value }}-title" aria-hidden="true">
+      <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-body">
+            <h3 class="modal-title" id="confirm-{{ option.value }}-title">{{ option.label }}?</h3>
+            <p class="text-secondary mb-0">{{ option.confirmation }}</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-link link-secondary me-auto" data-bs-dismiss="modal">Go back</button>
+            <form method="post" action="{% url 'project_status' project.pk %}">
+              {% csrf_token %}
+              <button type="submit" name="status" value="{{ option.value }}"
+                      class="btn {% if option.value == 'cancelled' %}btn-danger{% else %}btn-primary{% endif %}">{{ option.label }}</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{% endwith %}
+{% endblock %}

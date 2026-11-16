@@ -16,8 +16,18 @@ class Project(models.Model):
         PLANNING = "planning", "Planning"
         ACTIVE = "active", "Active"
         ON_HOLD = "on_hold", "On hold"
+        AWAITING_SIGN_OFF = "awaiting_sign_off", "Awaiting sign-off"
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
+        
+    ALLOWED_MOVES = {
+        Status.PLANNING: [Status.ACTIVE, Status.CANCELLED],
+        Status.ACTIVE: [Status.ON_HOLD, Status.AWAITING_SIGN_OFF, Status.CANCELLED],
+        Status.ON_HOLD: [Status.ACTIVE, Status.CANCELLED],
+        Status.AWAITING_SIGN_OFF: [Status.ACTIVE],
+        Status.COMPLETED: [Status.ACTIVE],
+        Status.CANCELLED: [Status.PLANNING]
+    }
         
     name = models.CharField(max_length = 120)
     scope = models.CharField(max_length = 20, choices = Scope.choices)
@@ -51,6 +61,56 @@ class Project(models.Model):
         
     def __str__(self):
         return self.name
+    
+    def next_statuses(self):
+        return self.ALLOWED_MOVES[self.status]
+    
+    @property
+    def is_read_only(self):
+        return self.status in (self.Status.COMPLETED, self.Status.CANCELLED)
+    
+    def move_to(self, status):
+        if status not in self.Status.values:
+            raise ValueError("That is not a valid project status.")
+        if status not in self.next_statuses():
+            raise ValueError(
+                f"A project cannot move from {self.get_status_display()} to {self.Status(status).label}."
+            )
+        self.status = status
+        self.save(update_fields=["status", "updated_at"])
+        
+    def confirmation_for(self, status):
+        if status == self.Status.CANCELLED:
+            return "Cancel this project? Open tasks stay as they are."
+        if self.status == self.Status.COMPLETED:
+            return "Reopen this project? Its sign-off is kept and it becomes editable again."
+        if self.status == self.Status.CANCELLED:
+            return "Reopen this project? It goes back to Planning and becomes editable again."
+        return None
+    
+    def status_options(self):
+        options = []
+        for status in self.next_statuses():
+            if self.is_read_only:
+                label = "Reopen project"
+            elif status == self.Status.CANCELLED:
+                label = "Cancel project"
+            else:
+                label = status.label
+            options.append({
+                "value": status.value,
+                "label": label,
+                "confirmation": self.confirmation_for(status)
+            })
+        return options
+    
+    @property
+    def halo_links(self):
+        return [
+            ("Opportunity", self.halo_opportunity_url),
+            ("Pre-sales", self.halo_presales_url),
+            ("Project", self.halo_project_url)
+        ]
     
 class ProjectSchool(models.Model):
     """Links a project to a school."""

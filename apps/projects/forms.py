@@ -27,15 +27,14 @@ class ProjectCustomerForm(TablerFormMixin, forms.Form):
             raise forms.ValidationError(str(error))
         return dfe_number
 
-class ProjectForm(TablerFormMixin, forms.ModelForm):
-    selected_schools = forms.MultipleChoiceField(
-        label = "Schools in scope", required = False, widget = forms.CheckboxSelectMultiple
-    )
-    
+class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
+    """Fields used to create and edit a project."""
+
     class Meta:
         model = Project
         fields = [
-            "name", "scope", "start_date", "target_end_date", "pm", "halo_opportunity_url", "halo_presales_url", "halo_project_url",
+            "name", "start_date", "target_end_date", "pm",
+            "halo_opportunity_url", "halo_presales_url", "halo_project_url",
         ]
         labels = {
             "name": "Project name",
@@ -46,7 +45,6 @@ class ProjectForm(TablerFormMixin, forms.ModelForm):
             "halo_project_url": "Project URL",
         }
         widgets = {
-            "scope": forms.RadioSelect,
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "target_end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
@@ -56,9 +54,45 @@ class ProjectForm(TablerFormMixin, forms.ModelForm):
             "target_end_date": {"required": "Enter a target end date."},
             "pm": {"required": "Choose a PM."},
         }
-    
-    def __init__(self, *args, customer, user, **kwargs):
+
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+
+        User = get_user_model()
+        eligible = Q(is_active=True) & (
+            Q(role__in=[User.Role.ADMINISTRATOR, User.Role.PROJECT_MANAGER]) | Q(is_superuser=True)
+        )
+        if self.instance.pk:
+            eligible |= Q(pk=self.instance.pm_id)
+        self.fields["pm"].queryset = User.objects.filter(eligible)
+        self.fields["pm"].label_from_instance = lambda person: person.get_full_name() or person.username
+        if user is not None and not self.instance.pk:
+            self.fields["pm"].initial = user
+
+        for name in ["halo_opportunity_url", "halo_presales_url", "halo_project_url"]:
+            self.fields[name].error_messages["invalid"] = "Enter a full web address starting with https://"
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("start_date"), cleaned.get("target_end_date")
+        if start and end and end < start:
+            self.add_error("target_end_date", "Target end date must be on or after the start date.")
+        return cleaned
+
+
+class ProjectForm(ProjectDetailsForm):
+    """Form to create a project."""
+
+    selected_schools = forms.MultipleChoiceField(
+        label="Schools in scope", required=False, widget=forms.CheckboxSelectMultiple
+    )
+
+    class Meta(ProjectDetailsForm.Meta):
+        fields = ProjectDetailsForm.Meta.fields + ["scope"]
+        widgets = {**ProjectDetailsForm.Meta.widgets, "scope": forms.RadioSelect}
+
+    def __init__(self, *args, customer, user, **kwargs):
+        super().__init__(*args, user=user, **kwargs)
         self.customer = customer
         
         if customer.is_trust:
@@ -76,22 +110,14 @@ class ProjectForm(TablerFormMixin, forms.ModelForm):
             self.fields["scope"].choices = [(Project.Scope.SCHOOL, Project.Scope.SCHOOL.label)]
             self.fields["scope"].initial = Project.Scope.SCHOOL
             del self.fields["selected_schools"]
-        
-        User = get_user_model()
-        self.fields["pm"].queryset = User.objects.filter(is_active = True).filter(
-            Q(role__in = [User.Role.ADMINISTRATOR, User.Role.PROJECT_MANAGER]) | Q(is_superuser = True)
-        )
-        self.fields["pm"].label_from_instance = lambda person: person.get_full_name() or person.username
-        self.fields["pm"].initial = user
-        
-        for name in ["halo_opportunity_url", "halo_presales_url", "halo_project_url"]:
-            self.fields[name].error_messages["invalid"] = "Enter a full web address"
-            
+
     def clean(self):
         cleaned = super().clean()
-        start, end = cleaned.get("start_date"), cleaned.get("target_end_date")
-        if start and end and end < start:
-            self.add_error("target_end_date", "Target end date must be on or after the start date.")
         if cleaned.get("scope") == Project.Scope.SELECTED and not cleaned.get("selected_schools"):
             self.add_error("selected_schools", "Choose at least one school.")
         return cleaned
+
+
+class ProjectEditForm(ProjectDetailsForm):
+    """Form to edit a project."""
+

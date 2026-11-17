@@ -12,4 +12,7 @@ urlpatterns = [
     path("milestones/<int:pk>/edit/", views.MilestoneUpdateView.as_view(), name="milestone_update"),
     path("milestones/<int:pk>/delete/", views.MilestoneDeleteView.as_view(), name="milestone_delete"),
     path("milestones/<int:pk>/toggle/", views.MilestoneToggleView.as_view(), name="milestone_toggle"),
+    path("projects/<int:project_pk>/tasks/new/", views.TaskCreateView.as_view(), name="task_create"),
+    path("tasks/<int:pk>/edit/", views.TaskUpdateView.as_view(), name="task_update"),
+    path("tasks/<int:pk>/delete/", views.TaskDeleteView.as_view(), name="task_delete"),
 ]

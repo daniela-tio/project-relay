@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from apps.core.forms import TablerFormMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
-from apps.projects.models import Project, ProjectMember, Milestone
+from apps.projects.models import Project, ProjectMember, Milestone, Task, ChecklistItem
 from apps.portfolio.forms import DFE_ENTRY_PATTERN
 
 class ProjectCustomerForm(TablerFormMixin, forms.Form):
@@ -13,7 +13,7 @@ class ProjectCustomerForm(TablerFormMixin, forms.Form):
     dfe_number = forms.CharField(
         label = "DFE number",
         validators = [RegexValidator(DFE_ENTRY_PATTERN, "Enter the DFE number.")],
-        error_messages={"required": "Enter a DFE number"},
+        error_messages = {"required": "Enter a DFE number"},
         widget = forms.TextInput(
             attrs = {"placeholder": "123/4567", "inputmode": "numeric", "pattern": DFE_ENTRY_PATTERN}
         ),
@@ -52,8 +52,8 @@ class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
             "halo_project_url": "Project URL",
         }
         widgets = {
-            "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
-            "target_end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "start_date": forms.DateInput(format = "%Y-%m-%d", attrs = {"type": "date"}),
+            "target_end_date": forms.DateInput(format = "%Y-%m-%d", attrs = {"type": "date"}),
         }
         error_messages = {
             "name": {"required": "Enter a project name."},
@@ -67,7 +67,7 @@ class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
 
         User = get_user_model()
         eligible = Q(is_active=True) & (
-            Q(role__in=[User.Role.ADMINISTRATOR, User.Role.PROJECT_MANAGER]) | Q(is_superuser=True)
+            Q(role__in = [User.Role.ADMINISTRATOR, User.Role.PROJECT_MANAGER]) | Q(is_superuser=True)
         )
         if self.instance.pk:
             eligible |= Q(pk=self.instance.pm_id)
@@ -92,7 +92,7 @@ class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
         active = Q(is_active = True) | Q(pk__in = current)
         self.fields["tech_lead"].queryset = User.objects.filter(active).order_by("first_name", "username")
         self.fields["team"].queryset = User.objects.filter(
-            (Q(is_active=True) & Q(role=User.Role.TECHNICIAN)) | Q(pk__in=current)
+            (Q(is_active=True) & Q(role=User.Role.TECHNICIAN)) | Q(pk__in = current)
         ).order_by("first_name", "username")
         for name in ("tech_lead", "team"):
             self.fields[name].label_from_instance = lambda person: person.get_full_name() or person.username
@@ -120,7 +120,7 @@ class ProjectForm(ProjectDetailsForm):
     """Form to create a project."""
 
     selected_schools = forms.MultipleChoiceField(
-        label="Schools in scope", required=False, widget=forms.CheckboxSelectMultiple
+        label = "Schools in scope", required = False, widget = forms.CheckboxSelectMultiple
     )
 
     class Meta(ProjectDetailsForm.Meta):
@@ -186,3 +186,88 @@ class MilestoneForm(TablerFormMixin, forms.ModelForm):
         if not start <= due <= end:
             raise forms.ValidationError(f"Milestone dates must fall within the project dates.")
         return due
+    
+class TaskForm(TablerFormMixin, forms.ModelForm):
+
+    class Meta:
+        model = Task
+        fields = [
+            "school", "milestone", "title", "description", "priority",
+            "start_date", "due_date", "start_time", "end_time",
+            "where", "location", "site_contact", "assignees", "halo_url",
+        ]
+        labels = {"halo_url": "Halo link", "start_time": "Start time", "end_time": "End time"}
+        widgets = {
+            "description": forms.Textarea(attrs = {"rows": 3}),
+            "start_date": forms.DateInput(format = "%Y-%m-%d", attrs = {"type": "date"}),
+            "due_date": forms.DateInput(format = "%Y-%m-%d", attrs = {"type": "date"}),
+            "start_time": forms.TimeInput(format = "%H:%M", attrs = {"type": "time"}),
+            "end_time": forms.TimeInput(format = "%H:%M", attrs = {"type": "time"}),
+            "where": forms.RadioSelect,
+            "assignees": forms.CheckboxSelectMultiple,
+        }
+        error_messages = {
+            "title": {"required": "Enter a task title."},
+            "start_date": {"required": "Enter a start date."},
+            "due_date": {"required": "Enter a due date."},
+            "halo_url": {"invalid": "Enter a full web address starting with https://"},
+        }
+
+    def __init__(self, *args, project, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.project = project
+
+        self.fields["school"].queryset = project.schools.all()
+        self.fields["school"].error_messages["invalid_choice"] = "That school isn't part of this project."
+        if project.scope == Project.Scope.SCHOOL:
+            self.fields["school"].required = True
+            self.fields["school"].initial = project.schools.first()
+        else:
+            self.fields["school"].empty_label = "Trust-wide (no single school)"
+
+        self.fields["milestone"].queryset = project.milestones.all()
+        self.fields["milestone"].empty_label = "No milestone"
+        self.fields["milestone"].error_messages["invalid_choice"] = "That milestone isn't part of this project."
+
+        User = get_user_model()
+        self.fields["assignees"].queryset = User.objects.filter(
+            Q(pk=project.pm_id) | Q(project_memberships__project=project)
+        ).distinct().order_by("first_name", "username")
+        self.fields["assignees"].error_messages["invalid_choice"] = "Only people on this project can be assigned."
+
+    def clean(self):
+        cleaned = super().clean()
+        start, due = cleaned.get("start_date"), cleaned.get("due_date")
+        project_start, project_end = self.project.start_date, self.project.target_end_date
+
+        if start and due and due < start:
+            self.add_error("due_date", "Start date must be on or before the due date.")
+        for name in ("start_date", "due_date"):
+            value = cleaned.get(name)
+            if value and not project_start <= value <= project_end:
+                self.add_error(name, (
+                    f"Dates must fall within the project ({project_start:%-d %b %Y} - {project_end:%-d %b %Y})."
+                ))
+
+        start_time, end_time = cleaned.get("start_time"), cleaned.get("end_time")
+        if (start_time is None) != (end_time is None):
+            self.add_error("end_time", "Enter both a start and an end time, or neither.")
+        elif start_time and end_time and end_time <= start_time:
+            self.add_error("end_time", "End time must be after the start time.")
+
+        if cleaned.get("where") == Task.Where.ON_SITE and not cleaned.get("location"):
+            self.add_error("location", "Enter where the work is.")
+        return cleaned
+
+
+class ChecklistItemForm(TablerFormMixin, forms.ModelForm):
+    class Meta:
+        model = ChecklistItem
+        fields = ["text"]
+        labels = {"text": "Checklist item"}
+
+
+ChecklistFormSet = forms.inlineformset_factory(
+    Task, ChecklistItem, form = ChecklistItemForm, extra = 3, can_delete=True
+)
+

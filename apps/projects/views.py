@@ -10,8 +10,8 @@ from django.utils import timezone
 from urllib.parse import urlencode
 from apps.accounts.permissions import RuleRequiredMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
-from apps.projects.forms import ProjectCustomerForm, ProjectForm, ProjectEditForm, MilestoneForm
-from apps.projects.models import Project, ProjectSchool, Trust, Milestone, Task
+from apps.projects.forms import ProjectCustomerForm, ProjectForm, ProjectEditForm, MilestoneForm, TaskForm, ChecklistFormSet
+from apps.projects.models import Project, ProjectSchool, Trust, Milestone, Task, ChecklistItem
 from apps.projects.services import ProjectCustomer
 
 def refuse_if_read_only(request, project):
@@ -231,3 +231,91 @@ class MilestoneToggleView(RuleRequiredMixin, View):
             messages.success(request, f"Milestone “{milestone.name}” completed.")
         milestone.save()
         return redirect("project_detail", pk=milestone.project.pk)
+    
+class TaskFormMixin(RuleRequiredMixin):
+    """Shared by creating and editing a task: the form plus its checklist, saved together."""
+
+    permission_rule = "can_edit_project_data"
+    model = Task
+    form_class = TaskForm
+    template_name = "projects/task_form.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["project"] = self.get_project()
+        return kwargs
+
+    def get(self, request, *args, **kwargs):
+        return refuse_if_read_only(request, self.get_project()) or super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        refused = refuse_if_read_only(request, self.get_project())
+        if refused:
+            return refused
+        self.object = self.get_existing_task()
+        form = self.get_form()
+        checklist = ChecklistFormSet(request.POST, instance=self.object or Task())
+        if form.is_valid() and checklist.is_valid():
+            return self.save_task(form, checklist)
+        return self.render_to_response(self.get_context_data(form=form, checklist=checklist))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["project"] = self.get_project()
+        context.setdefault("checklist", ChecklistFormSet(instance=self.object or Task()))
+        return context
+
+    @transaction.atomic
+    def save_task(self, form, checklist):
+        task = form.save(commit=False)
+        task.project = self.get_project()
+        task.save()
+        form.save_m2m()  # saves the assignees, which need the task to exist first
+        checklist.instance = task
+        checklist.save()
+        messages.success(self.request, self.success_text)
+        return redirect(f"{reverse('project_detail', args=[task.project.pk])}?tab=tasks")
+
+
+class TaskCreateView(TaskFormMixin, CreateView):
+    success_text = "Task created."
+
+    def get_project(self):
+        return get_object_or_404(Project, pk=self.kwargs["project_pk"])
+
+    def get_existing_task(self):
+        return None
+
+    def get_initial(self):
+        # "Add task to {milestone}" (C8) pre-selects that milestone
+        initial = super().get_initial()
+        if self.request.GET.get("milestone"):
+            initial["milestone"] = self.request.GET["milestone"]
+        return initial
+
+
+class TaskUpdateView(TaskFormMixin, UpdateView):
+    success_text = "Task updated."
+
+    def get_project(self):
+        return self.get_object().project
+
+    def get_existing_task(self):
+        return self.get_object()
+
+
+class TaskDeleteView(RuleRequiredMixin, View):
+    """Delete a task. POST only, from its confirmation modal."""
+
+    permission_rule = "can_edit_project_data"
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        task = get_object_or_404(Task, pk=pk)
+        project = task.project
+        refused = refuse_if_read_only(request, project)
+        if refused:
+            return refused
+        task.delete()
+        messages.success(request, f"Task “{task.title}” deleted.")
+        return redirect(f"{reverse('project_detail', args=[project.pk])}?tab=tasks")

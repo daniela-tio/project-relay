@@ -1,0 +1,119 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}{% if object %}Edit task{% else %}New task{% endif %}{% endblock %}
+
+{% block content %}
+<ol class="breadcrumb mb-2">
+  <li class="breadcrumb-item"><a href="{% url 'portfolio' %}">Portfolio</a></li>
+  <li class="breadcrumb-item"><a href="{% url 'project_detail' project.pk %}">{{ project.name }}</a></li>
+  <li class="breadcrumb-item active" aria-current="page">{% if object %}Edit task{% else %}New task{% endif %}</li>
+</ol>
+
+<div class="page-header mb-3">
+  <div class="row align-items-center">
+    <div class="col">
+      <h1 class="page-title">{% if object %}Edit task{% else %}New task{% endif %}</h1>
+      <div class="text-secondary">
+        {{ project.name }} · project dates {{ project.start_date|date:"j M Y" }} - {{ project.target_end_date|date:"j M Y" }}
+      </div>
+    </div>
+    {% if object %}
+    <div class="col-auto ms-auto">
+      <button type="button" class="btn btn-ghost-danger" data-bs-toggle="modal" data-bs-target="#delete-task">Delete task</button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% if form.errors or checklist.total_error_count %}
+  <div class="alert alert-danger" role="alert">Please fix the problems below.</div>
+  {% endif %}
+
+  <div class="row row-cards">
+    <div class="col-lg-7">
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">{% include "partials/_form_field.html" with field=form.school %}</div>
+            <div class="col-md-6">{% include "partials/_form_field.html" with field=form.milestone %}</div>
+          </div>
+          {% include "partials/_form_field.html" with field=form.title %}
+          {% include "partials/_form_field.html" with field=form.description %}
+          <div class="row">
+            <div class="col-md-4">{% include "partials/_form_field.html" with field=form.priority %}</div>
+            <div class="col-md-4">{% include "partials/_form_field.html" with field=form.start_date %}</div>
+            <div class="col-md-4">{% include "partials/_form_field.html" with field=form.due_date %}</div>
+          </div>
+          <div class="row">
+            <div class="col-md-4">{% include "partials/_form_field.html" with field=form.start_time %}</div>
+            <div class="col-md-4">{% include "partials/_form_field.html" with field=form.end_time %}</div>
+          </div>
+
+          <div class="mb-3">
+            <div class="form-label">Where</div>
+            {% for radio in form.where %}
+            <label class="form-check form-check-inline">
+              {{ radio.tag }}<span class="form-check-label">{{ radio.choice_label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="row">
+            <div class="col-md-6">{% include "partials/_form_field.html" with field=form.location %}</div>
+            <div class="col-md-6">{% include "partials/_form_field.html" with field=form.site_contact %}</div>
+          </div>
+          {% include "partials/_form_field.html" with field=form.halo_url %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title">Assignees</h3></div>
+        <div class="card-body">
+          {% for checkbox in form.assignees %}
+          <label class="form-check">
+            {{ checkbox.tag }}<span class="form-check-label">{{ checkbox.choice_label }}</span>
+          </label>
+          {% empty %}
+          <div class="text-secondary small">Add a team to the project first.</div>
+          {% endfor %}
+          {% for error in form.assignees.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          <div class="form-hint">Only people on this project can be assigned.</div>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title">Checklist</h3></div>
+        <div class="card-body">
+          {{ checklist.management_form }}
+          {% for item in checklist %}
+            {{ item.id }}
+            <div class="d-flex gap-2 align-items-start mb-2">
+              <div class="flex-fill">
+                {{ item.text }}
+                {% for error in item.text.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+              </div>
+              {% if item.instance.pk %}
+              <label class="form-check mt-2">{{ item.DELETE }}<span class="form-check-label small">Remove</span></label>
+              {% endif %}
+            </div>
+          {% endfor %}
+          <div class="form-hint">Blank rows are ignored. Save to get more empty rows.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-end border-top pt-3">
+    <a href="{% url 'project_detail' project.pk %}?tab=tasks" class="btn">Cancel</a>
+    <button type="submit" class="btn btn-primary">{% if object %}Save changes{% else %}Create task{% endif %}</button>
+  </div>
+</form>
+
+{% if object %}
+  {% url 'task_delete' object.pk as delete_url %}
+  {% include "partials/_confirm_modal.html" with modal_id="delete-task" title="Delete this task?" message="This can't be undone." action_url=delete_url button="Delete task" danger=True %}
+{% endif %}
+{% endblock %}

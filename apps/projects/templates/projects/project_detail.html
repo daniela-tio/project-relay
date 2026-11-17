@@ -69,6 +69,7 @@
         {% if user.can_edit_project_data and not project.is_read_only %}
         <div class="card-actions">
           <a href="{% url 'milestone_create' project.pk %}" class="btn btn-sm">Add milestone</a>
+          <a href="{% url 'task_create' project.pk %}" class="btn btn-sm">Add task</a>
         </div>
         {% endif %}
       </div>

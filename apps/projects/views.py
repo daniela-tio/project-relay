@@ -81,7 +81,8 @@ class ProjectCreateView(RuleRequiredMixin, CreateView):
             
         for dfe_number in dfe_numbers:
             ProjectSchool.objects.create(project = project, school = self.customer.save_school(dfe_number))
-            
+        
+        form.save_members(project)    
         messages.success(self.request, "Project created.")
         return redirect("project_detail", pk = project.pk)
     
@@ -90,7 +91,7 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
     template_name = "projects/project_detail.html"
     
     def get_queryset(self):
-        return Project.objects.select_related("trust", "pm").prefetch_related("schools")
+        return Project.objects.select_related("trust", "pm").prefetch_related("schools", "members__user")
     
 class ProjectStatusView(RuleRequiredMixin, View):
     
@@ -131,3 +132,9 @@ class ProjectUpdateView(RuleRequiredMixin, SuccessMessageMixin, UpdateView):
     
     def get_success_url(self):
         return reverse("project_detail", args=[self.object.pk])
+    
+    @transaction.atomic
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        form.save_members(self.object)
+        return response

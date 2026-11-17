@@ -1,3 +1,4 @@
+from datetime import date
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -5,6 +6,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from apps.accounts.permissions import rule_required
+from apps.projects.models import Project, ProjectMember
 
 
 class SignInTests(TestCase):
@@ -99,11 +101,11 @@ class RuleRequiredTests(TestCase):
     
 class CaseInsensitiveUsernameTests(TestCase):
     def test_username_stored_in_lower_case(self):
-        user = get_user_model().objects.create_user("MixedCase", password="Mine-Cat-1")
+        user = get_user_model().objects.create_user("MixedCase", password = "Mine-Cat-1")
         self.assertEqual(user.username, "mixedcase")
         
     def test_sign_in_ignores_capitalisation(self):
-        get_user_model().objects.create_user("tech5", password="Home-Monkey-1")
+        get_user_model().objects.create_user("tech5", password = "Home-Monkey-1")
         response = self.client.post(
             reverse("sign_in"), {"username": "TECH5", "password": "Home-Monkey-1"}
         )
@@ -113,12 +115,20 @@ class ManageUsersTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.admin = User.objects.create_user(
-            "admin3", email="admin3@test.com", password="Craft-Fish-1", role=User.Role.ADMINISTRATOR
+            "admin3", email = "admin3@test.com", password = "Craft-Fish-1", role = User.Role.ADMINISTRATOR
+        )
+        self.pm = User.objects.create_user(
+            "pm6", email = "pm6@test.com", password = "Voice-Pair-1", role = User.Role.PROJECT_MANAGER
         )
         self.tech = User.objects.create_user(
-            "tech6", email="tech6@test.com", password="Ready-Prawn-1", role=User.Role.TECHNICIAN
+            "tech6", email = "tech6@test.com", password = "Ready-Prawn-1", role = User.Role.TECHNICIAN
         )
         
+    def make_project(self):
+        return Project.objects.create(
+            name = "Test", scope = Project.Scope.SCHOOL, pm = self.pm, start_date = date(2027, 1, 11), target_end_date = date(2027, 2, 1)
+        )
+
     def test_technician_cannot_open_users_page(self):
         self.client.force_login(self.tech)
         self.assertEqual(self.client.get(reverse("user_list")).status_code, 403)
@@ -198,7 +208,21 @@ class ManageUsersTests(TestCase):
         self.client.force_login(self.admin)
         self.client.post(reverse("user_delete", args=[self.admin.pk]))
         self.assertTrue(get_user_model().objects.filter(pk=self.admin.pk).exists())
-    
+        
+    def test_pm_with_a_project_cannot_be_deleted(self):
+        self.make_project()
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("user_delete", args=[self.pm.pk]), follow=True)
+        self.assertContains(response, "is assigned to one or more projects")
+        self.assertTrue(get_user_model().objects.filter(pk=self.pm.pk).exists())
+
+    def test_tech_on_a_project_team_cannot_be_deleted(self):
+        ProjectMember.objects.create(project = self.make_project(), user = self.tech, role=ProjectMember.Role.TECH)
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("user_delete", args=[self.tech.pk]), follow=True)
+        self.assertContains(response, "is assigned to one or more projects")
+        self.assertTrue(get_user_model().objects.filter(pk=self.tech.pk).exists())
+        
     def test_email_is_required(self):
         self.client.force_login(self.admin)
         response = self.client.post(reverse("user_create"), {

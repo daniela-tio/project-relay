@@ -79,6 +79,19 @@
                 <div class="card-body">
                     {% include "partials/_form_field.html" with field=form.pm %}
                     <div class="form-hint">Users with the PM or Administrator role.</div>
+
+                    {% include "partials/_form_field.html" with field=form.tech_lead %}
+                    <div class="mb-3">
+                        <div class="form-label">{{ form.team.label }}</div>
+                        {% for checkbox in form.team %}
+                        <label class="form-check">
+                            {{ checkbox.tag }}
+                            <span class="form-check-label">{{ checkbox.choice_label }}</span>
+                        </label>
+                        {% empty %}
+                        <div class="text-secondary">No technicians assigned.</div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
 

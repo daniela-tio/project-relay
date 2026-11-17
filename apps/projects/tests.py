@@ -1,11 +1,12 @@
 from datetime import date
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from apps.portfolio.gias import run_import
 from apps.portfolio.models import School, Trust
 from apps.portfolio.tests import OPEN_ACADEMY, make_gias_csv
-from apps.projects.models import Project, ProjectSchool
+from apps.projects.models import Project, ProjectSchool, ProjectMember
 
 def dfe(row):
     return row["LA (code)"] + row["EstablishmentNumber"]
@@ -164,6 +165,11 @@ class NewProjectTests(TestCase):
         self.assertIn("scope", response.context["form"].errors)
         self.assertFalse(Project.objects.exists())
         
+    def test_new_project_saves_team(self):
+        self.client.post(self.create_url(OPEN_ACADEMY), self.project_data(tech_lead = self.tech.pk))
+        member = Project.objects.get().members.get()
+        self.assertEqual((member.user, member.role), (self.tech, ProjectMember.Role.TECH_LEAD))
+        
 class ProjectStatusRuleTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -222,18 +228,21 @@ class ProjectStatusRuleTests(TestCase):
 class ProjectPageTests(TestCase):
     def setUp(self):
         User = get_user_model()
+        self.admin = User.objects.create_user(
+            "admin13", email = "admin13@test.com", password = "Bright-Kite-1", role=User.Role.ADMINISTRATOR
+        )
         self.pm = User.objects.create_user(
-            "pm13", email="pm13@test.com", password="Sleep-Floor-1", role=User.Role.PROJECT_MANAGER
+            "pm13", email = "pm13@test.com", password = "Sleep-Floor-1", role = User.Role.PROJECT_MANAGER
         )
         self.tech = User.objects.create_user(
-            "tech13", email="tech13@test.com", password="Testify-Panel-1", role=User.Role.TECHNICIAN
+            "tech13", email = "tech13@test.com", password = "Testify-Panel-1", role = User.Role.TECHNICIAN
         )
-        self.school = School.objects.create(name="Beacon High", dfe_number="8874005")
+        self.school = School.objects.create(name = "Beacon High", dfe_number = "8874005")
         self.project = Project.objects.create(
-            name="Wi-Fi Refresh", scope=Project.Scope.SCHOOL, pm=self.pm,
-            start_date=date(2027, 1, 11), target_end_date=date(2027, 2, 1),
+            name = "Wi-Fi Refresh", scope = Project.Scope.SCHOOL, pm = self.pm,
+            start_date = date(2027, 1, 11), target_end_date = date(2027, 2, 1),
         )
-        ProjectSchool.objects.create(project=self.project, school=self.school)
+        ProjectSchool.objects.create(project = self.project, school = self.school)
         self.client.force_login(self.pm)
 
     def detail_url(self):
@@ -311,9 +320,87 @@ class ProjectPageTests(TestCase):
     def test_edit_keeps_a_pm_whose_role_has_since_changed(self):
         self.pm.role = get_user_model().Role.TECHNICIAN
         self.pm.save()
-        self.client.force_login(get_user_model().objects.create_user(
-            "admin13", email="admin13@test.com", password="Bright-Kite-1",
-            role=get_user_model().Role.ADMINISTRATOR,
-        ))
+        self.client.force_login(self.admin)
         response = self.client.post(self.edit_url(), self.edit_data(name="Still saves"))
         self.assertRedirects(response, self.detail_url())
+        
+class ProjectTeamTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.pm = User.objects.create_user(
+            "pm16", email = "pm16@test.com", password = "Half-Kid-1", role = User.Role.PROJECT_MANAGER
+        )
+        self.lead = User.objects.create_user(
+            "tech16a", email = "tech16a@test.com", password = "Rain-Button-1", role = User.Role.TECHNICIAN
+        )
+        self.tech = User.objects.create_user(
+            "tech16b", email = "tech16b@test.com", password = "Fantasy-Fire-1", role = User.Role.TECHNICIAN
+        )
+        self.project = Project.objects.create(
+            name="Wi-Fi Refresh", scope=Project.Scope.SCHOOL, pm=self.pm,
+            start_date=date(2027, 1, 11), target_end_date=date(2027, 2, 1),
+        )
+        self.client.force_login(self.pm)
+        
+    def edit_url(self):
+        return reverse("project_update", args=[self.project.pk])
+    
+    def edit_data(self, **changes):
+        data = {"name": "Wifi refresh", "start_date": "2027-01-11", "target_end_date": "2027-02-01", "pm": self.pm.pk}
+        data.update(changes)
+        return data
+    
+    def roles(self):
+        return {m.user.username: m.role for m in self.project.members.select_related("user")}
+    
+    def test_team_is_saved_with_roles(self):
+        self.client.post(self.edit_url(), self.edit_data(tech_lead = self.lead.pk, team = [self.tech.pk]))
+        self.assertEqual(self.roles(), {"tech16a": "tech_lead", "tech16b": "tech"})
+
+    def test_tech_lead_ticked_in_team_appears_once(self):
+        self.client.post(self.edit_url(), self.edit_data(tech_lead = self.lead.pk, team = [self.lead.pk, self.tech.pk]))
+        self.assertEqual(self.roles(), {"tech16a": "tech_lead", "tech16b": "tech"})
+
+    def test_pm_can_also_be_tech_lead(self):
+        self.client.post(self.edit_url(), self.edit_data(tech_lead = self.pm.pk))
+        self.assertEqual(self.roles(), {"pm16": "tech_lead"})
+
+    def test_team_only_lists_technicians(self):
+        form = self.client.get(self.edit_url()).context["form"]
+        self.assertEqual(set(form.fields["team"].queryset), {self.lead, self.tech})
+
+    def test_editing_replaces_the_team(self):
+        ProjectMember.objects.create(project = self.project, user = self.lead, role = ProjectMember.Role.TECH)
+        self.client.post(self.edit_url(), self.edit_data(team = [self.tech.pk]))
+        self.assertEqual(self.roles(), {"tech16b": "tech"})
+
+    def test_edit_form_shows_the_current_team(self):
+        ProjectMember.objects.create(project = self.project, user = self.lead, role = ProjectMember.Role.TECH_LEAD)
+        ProjectMember.objects.create(project = self.project, user = self.tech, role = ProjectMember.Role.TECH)
+        form = self.client.get(self.edit_url()).context["form"]
+        self.assertEqual(form.fields["tech_lead"].initial, self.lead.pk)
+        self.assertEqual(form.fields["team"].initial, [self.tech.pk])
+
+    def test_deactivated_member_does_not_block_editing(self):
+        ProjectMember.objects.create(project = self.project, user = self.tech, role = ProjectMember.Role.TECH)
+        self.tech.is_active = False
+        self.tech.save()
+        response = self.client.post(self.edit_url(), self.edit_data(name = "Still saves", team = [self.tech.pk]))
+        self.assertRedirects(response, reverse("project_detail", args = [self.project.pk]))
+
+    def test_database_allows_only_one_tech_lead(self):
+        ProjectMember.objects.create(project = self.project, user = self.lead, role = ProjectMember.Role.TECH_LEAD)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ProjectMember.objects.create(project = self.project, user = self.tech, role = ProjectMember.Role.TECH_LEAD)
+
+    def test_project_page_shows_the_team(self):
+        ProjectMember.objects.create(project = self.project, user = self.lead, role = ProjectMember.Role.TECH_LEAD)
+        ProjectMember.objects.create(project = self.project, user = self.tech, role = ProjectMember.Role.TECH)
+        response = self.client.get(reverse("project_detail", args = [self.project.pk]))
+        self.assertContains(response, "tech16a")
+        self.assertContains(response, "tech16b")
+
+    def test_project_page_says_when_there_is_no_team(self):
+        response = self.client.get(reverse("project_detail", args = [self.project.pk]))
+        self.assertContains(response, "No techs yet")

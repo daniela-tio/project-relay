@@ -8,4 +8,8 @@ urlpatterns = [
     path("projects/<int:pk>/", views.ProjectDetailView.as_view(), name="project_detail"),
     path("projects/<int:pk>/status/", views.ProjectStatusView.as_view(), name="project_status"),
     path("projects/<int:pk>/edit/", views.ProjectUpdateView.as_view(), name="project_update"),
+    path("projects/<int:project_pk>/milestones/new/", views.MilestoneCreateView.as_view(), name="milestone_create"),
+    path("milestones/<int:pk>/edit/", views.MilestoneUpdateView.as_view(), name="milestone_update"),
+    path("milestones/<int:pk>/delete/", views.MilestoneDeleteView.as_view(), name="milestone_delete"),
+    path("milestones/<int:pk>/toggle/", views.MilestoneToggleView.as_view(), name="milestone_toggle"),
 ]

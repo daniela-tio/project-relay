@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
+from django.urls import reverse
 from apps.portfolio.models import School, Trust
 
 class Project(models.Model):
@@ -160,7 +161,7 @@ class Milestone(models.Model):
     project = models.ForeignKey(Project, on_delete = models.CASCADE, related_name = "milestones")
     name = models.CharField(max_length = 120)
     due_date = models.DateField()
-    completed_at = models.DateField()
+    completed_at = models.DateField(null = True, blank = True)
     completed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete = models.SET_NULL, null = True, blank = True, related_name = "+"
     )
@@ -181,6 +182,23 @@ class Milestone(models.Model):
         if self.due_date < timezone.localdate():
             return "overdue"
         return "open"
+    
+    @property
+    def delete_url(self):
+        return reverse("milestone_delete", args = [self.pk])
+    
+    @property
+    def toggle_url(self):
+        return reverse("milestone_toggle", args = [self.pk])
+    
+    @property
+    def delete_modal_id(self):
+        return f"delete-milestone-{self.pk}"
+    
+    @property
+    def reopen_modal_id(self):
+        return f"reopen-milestone-{self.pk}"
+    
     
 class Task(models.Model):
     
@@ -215,6 +233,7 @@ class Task(models.Model):
     site_contact = models.CharField(max_length = 200, blank = True)
     assignees = models.ManyToManyField(settings.AUTH_USER_MODEL, blank = True, related_name = "tasks")
     halo_url = models.DateTimeField(null = True, blank = True)
+    completed_at = models.DateTimeField(null = True, blank = True)
     created_at = models.DateTimeField(auto_now_add = True)
     updated_at = models.DateTimeField(auto_now = True)
     

@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from apps.core.forms import TablerFormMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
-from apps.projects.models import Project, ProjectMember
+from apps.projects.models import Project, ProjectMember, Milestone
 from apps.portfolio.forms import DFE_ENTRY_PATTERN
 
 class ProjectCustomerForm(TablerFormMixin, forms.Form):
@@ -157,3 +157,32 @@ class ProjectForm(ProjectDetailsForm):
 class ProjectEditForm(ProjectDetailsForm):
     """Form to edit a project."""
 
+class MilestoneForm(TablerFormMixin, forms.ModelForm):
+    
+    class Meta:
+        model = Milestone
+        fields = ["name", "due_date"]
+        labels = {"due_date": "due_date"}
+        widgets = {"due_date": forms.DateInput(format = "%Y-%n-%d", attrs = {"type": "date"})}
+        error_messages = {
+            "name": {"required": "Enter a milestone name."},
+            "due_date": {"required": "Enter a due date."}
+        }
+        
+    def __init__(self, *args, project, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.project = project
+        
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        duplicate = self.project.milestones.filter(name__iexact = name).exclude(pk = self.instance.pk)
+        if duplicate.exists():
+            raise forms.ValidationError(f"Milestone {name} already exists.")
+        return name
+    
+    def clean_due_date(self):
+        due = self.cleaned_data["due_date"]
+        start, end = self.project.start_date, self.project.target_end_date
+        if not start <= due <= end:
+            raise forms.ValidationError(f"Milestone dates must fall within the project dates.")
+        return due

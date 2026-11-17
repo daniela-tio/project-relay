@@ -4,15 +4,21 @@ from django.views.generic import FormView, CreateView, UpdateView, DetailView, V
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
+from django.db.models import Count, Q
 from django.contrib.messages.views import SuccessMessageMixin
+from django.utils import timezone
 from urllib.parse import urlencode
 from apps.accounts.permissions import RuleRequiredMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
-from apps.projects.forms import ProjectCustomerForm, ProjectForm, ProjectEditForm
-from apps.projects.models import Project, ProjectSchool, Trust
+from apps.projects.forms import ProjectCustomerForm, ProjectForm, ProjectEditForm, MilestoneForm
+from apps.projects.models import Project, ProjectSchool, Trust, Milestone, Task
 from apps.projects.services import ProjectCustomer
 
-
+def refuse_if_read_only(request, project):
+    if project.is_read_only:
+        messages.error(request, "This project is closed. Reopen to make changes")
+        return redirect("project_detail", pk = project.pk)
+    return None
 
 class ProjectCustomerView(RuleRequiredMixin, FormView):
     permission_rule = "can_edit_project_data"
@@ -93,6 +99,14 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
     def get_queryset(self):
         return Project.objects.select_related("trust", "pm").prefetch_related("schools", "members__user")
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["milestones"] = self.object.milestones.annotate(
+            task_count = Count("tasks"),
+            done_count = Count("tasks", filter = Q(tasks__status = Task.Status.DONE)),
+        )
+        return context
+    
 class ProjectStatusView(RuleRequiredMixin, View):
     
     permission_rule = "can_edit_project_data"
@@ -138,3 +152,82 @@ class ProjectUpdateView(RuleRequiredMixin, SuccessMessageMixin, UpdateView):
         response = super().form_valid(form)
         form.save_members(self.object)
         return response
+    
+class MilestoneFormMixin(RuleRequiredMixin):
+    
+    permission_rule = "can_edit_project_data"
+    model = Milestone
+    form_class = MilestoneForm
+    template_name = "projects/milestone_form.html"
+    
+    def get(self, request, *args, **kwargs):
+        return refuse_if_read_only(request, self.get_project()) or super().get(request, *args, **kwargs)
+    
+    def post(self, request, *args, **kwargs):
+        return refuse_if_read_only(request, self.get_project()) or super().post(request, *args, **kwargs)
+    
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["project"] = self.get_project()
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["project"] = self.get_project()
+        return context
+
+    def get_success_url(self):
+        return reverse("project_detail", args=[self.get_project().pk])
+
+class MilestoneCreateView(MilestoneFormMixin, CreateView):
+    def get_project(self):
+        return get_object_or_404(Project, pk=self.kwargs["project_pk"])
+
+    def form_valid(self, form):
+        form.instance.project = self.get_project()
+        messages.success(self.request, "Milestone added.")
+        return super().form_valid(form)
+
+class MilestoneUpdateView(MilestoneFormMixin, UpdateView):
+    def get_project(self):
+        return self.get_object().project
+
+    def form_valid(self, form):
+        messages.success(self.request, "Milestone updated.")
+        return super().form_valid(form)
+
+class MilestoneDeleteView(RuleRequiredMixin, View):
+
+    permission_rule = "can_edit_project_data"
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        milestone = get_object_or_404(Milestone, pk=pk)
+        project = milestone.project
+        refused = refuse_if_read_only(request, project)
+        if refused:
+            return refused
+        milestone.delete()
+        messages.success(request, f"Milestone “{milestone.name}” deleted.")
+        return redirect("project_detail", pk=project.pk)
+
+class MilestoneToggleView(RuleRequiredMixin, View):
+
+    permission_rule = "can_edit_project_data"
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        milestone = get_object_or_404(Milestone, pk=pk)
+        refused = refuse_if_read_only(request, milestone.project)
+        if refused:
+            return refused
+        if milestone.completed_at:
+            milestone.completed_at = None
+            milestone.completed_by = None
+            messages.success(request, f"Milestone “{milestone.name}” reopened.")
+        else:
+            milestone.completed_at = timezone.now()
+            milestone.completed_by = request.user
+            messages.success(request, f"Milestone “{milestone.name}” completed.")
+        milestone.save()
+        return redirect("project_detail", pk=milestone.project.pk)

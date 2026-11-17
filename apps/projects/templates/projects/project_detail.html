@@ -62,6 +62,57 @@
       <div class="card-header"><h3 class="card-title">Progress</h3></div>
       <div class="card-body text-secondary">No tasks yet.</div>
     </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Milestones</h3>
+        {% if user.can_edit_project_data and not project.is_read_only %}
+        <div class="card-actions">
+          <a href="{% url 'milestone_create' project.pk %}" class="btn btn-sm">Add milestone</a>
+        </div>
+        {% endif %}
+      </div>
+      <div class="list-group list-group-flush">
+        {% for milestone in milestones %}
+        <div class="list-group-item">
+          <div class="row align-items-center">
+            {% if user.can_edit_project_data and not project.is_read_only %}
+            <div class="col-auto">
+              {% if milestone.completed_at %}
+                <button type="button" class="btn btn-icon btn-sm btn-ghost-success" aria-label="Reopen {{ milestone.name }}"
+                        data-bs-toggle="modal" data-bs-target="#{{ milestone.reopen_modal_id}}">✓</button>
+              {% else %}
+                <form method="post" action="{% url 'milestone_toggle' milestone.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-sm" aria-label="Mark {{ milestone.name }} complete">○</button>
+                </form>
+              {% endif %}
+            </div>
+            {% endif %}
+            <div class="col">
+              <strong>{{ milestone.name }}</strong>
+              <span class="text-secondary small">· {{ milestone.done_count }} of {{ milestone.task_count }} tasks</span>
+            </div>
+            <div class="col-auto small">{{ milestone.due_date|date:"D j M" }}</div>
+            <div class="col-auto">
+              {% if milestone.status == "done" %}<span class="badge bg-green-lt">Done {{ milestone.completed_at|date:"j M" }}</span>
+              {% elif milestone.status == "overdue" %}<span class="badge bg-red-lt">Overdue</span>
+              {% else %}<span class="badge bg-secondary-lt">Open</span>{% endif %}
+            </div>
+            {% if user.can_edit_project_data and not project.is_read_only %}
+            <div class="col-auto">
+              <a href="{% url 'milestone_update' milestone.pk %}" class="btn btn-sm">Edit</a>
+              <button type="button" class="btn btn-sm btn-ghost-danger"
+                      data-bs-toggle="modal" data-bs-target="#{{ milestone.delete_modal_id }}">Delete</button>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="list-group-item text-secondary">No milestones yet.</div>
+        {% endfor %}
+      </div>
+    </div>
   </div>
 
   <div class="col-lg-4">
@@ -94,7 +145,7 @@
         {% for school in schools %}
           <a href="{% url 'school_detail' school.pk %}" class="list-group-item list-group-item-action">{{ school.name }}</a>
         {% empty %}
-          <div class="list-group-item text-secondary">This project is for the trust’s central team.</div>
+          <div class="list-group-item text-secondary">This project is for the trust's central team.</div>
         {% endfor %}
       </div>
     </div>
@@ -135,6 +186,15 @@
         </div>
       </div>
     </div>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{% if user.can_edit_project_data and not project.is_read_only %}
+  {% for milestone in milestones %}
+    {% include "partials/_confirm_modal.html" with modal_id=milestone.delete_modal_id title="Delete this milestone?" message="This can't be undone. Its tasks move to No milestone." action_url=milestone.delete_url button="Delete milestone" danger=True %}
+    {% if milestone.completed_at %}
+      {% include "partials/_confirm_modal.html" with modal_id=milestone.reopen_modal_id title="Reopen this milestone?" message="It will show as Open again." action_url=milestone.toggle_url button="Reopen milestone" %}
     {% endif %}
   {% endfor %}
 {% endif %}

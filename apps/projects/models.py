@@ -254,6 +254,23 @@ class Task(models.Model):
         
     def __str__(self):
         return self.title
+    
+    @property
+    def is_done(self):
+        return self.status == self.Status.DONE
+    
+    def mark_done(self):
+        self.status = self.Status.DONE
+        self.completed_at = timezone.now()
+        self.save(update_fields = ["status", "completed_at", "updated_at"])
+        
+    def reopen(self):
+        self.status = self.Status.TO_DO
+        self.completed_at = None
+        self.save(update_fields = ["status", "completed_at", "updated_at"])
+    
+    def can_be_ticked_by(self, user):
+        return user.can_edit_project_data or self.assignees.filter(pk = user.pk).exists()
 
 class ChecklistItem(models.Model):
     

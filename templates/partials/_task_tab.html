@@ -1,0 +1,50 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="btn-group" role="group" aria-label="Show tasks">
+    <a href="?tab=tasks&status=open" class="btn{% if status == 'open' %} active{% endif %}">Open</a>
+    <a href="?tab=tasks&status=done" class="btn{% if status == 'done' %} active{% endif %}">Done</a>
+    <a href="?tab=tasks&status=all" class="btn{% if status == 'all' %} active{% endif %}">All</a>
+  </div>
+  {% if user.can_edit_project_data and not project.is_read_only %}
+  <a href="{% url 'task_create' project.pk %}" class="btn btn-primary">Add task</a>
+  {% endif %}
+</div>
+
+{% if not progress.total %}
+  <div class="card"><div class="card-body text-secondary">No tasks yet. Add the first one.</div></div>
+{% else %}
+  {% for group in groups %}
+    {% if group.milestone or group.task_count %}
+    <div class="card mb-3">
+      <div class="card-header">
+        <h3 class="card-title">
+          {% if group.milestone %}{{ group.milestone.name }}
+            <span class="text-secondary small fw-normal">· due {{ group.milestone.due_date|date:"D j M" }}</span>
+          {% else %}No milestone{% endif %}
+        </h3>
+        <div class="card-actions d-flex gap-2 align-items-center">
+          <span class="small text-secondary">{{ group.done_count }} of {{ group.task_count }} done</span>
+          {% if group.milestone %}
+            {% if group.milestone.status == "done" %}<span class="badge bg-green-lt">Done</span>
+            {% elif group.milestone.status == "overdue" %}<span class="badge bg-red-lt">Overdue</span>
+            {% else %}<span class="badge bg-secondary-lt">Open</span>{% endif %}
+            {% if user.can_edit_project_data and not project.is_read_only %}
+            <a href="{% url 'task_create' project.pk %}?milestone={{ group.milestone.pk }}" class="btn btn-sm">Add task</a>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table card-table table-vcenter">
+          <tbody>
+            {% for task in group.tasks %}
+              {% include "partials/_task_row.html" %}
+            {% empty %}
+              <tr><td class="text-secondary small">No tasks shown in this group.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+{% endif %}

@@ -3,10 +3,12 @@ from django.urls import reverse
 from django.views.generic import FormView, CreateView, UpdateView, DetailView, View 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Count, Q
 from django.contrib.messages.views import SuccessMessageMixin
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from urllib.parse import urlencode
 from apps.accounts.permissions import RuleRequiredMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
@@ -101,11 +103,48 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["milestones"] = self.object.milestones.annotate(
+        project = self.object
+        milestones = list(project.milestones.annotate(
             task_count = Count("tasks"),
-            done_count = Count("tasks", filter = Q(tasks__status = Task.Status.DONE)),
+            done_count = Count("tasks", filter = Q(tasks__status = Task.Status.DONE))
+        ))
+        all_tasks = list(
+            project.tasks.select_related("school", "milestone").prefetch_related("assignees")
         )
+        
+        done = sum(1 for task in all_tasks if task.is_done)
+        context["progress"] = {
+            "done": done,
+            "total": len(all_tasks),
+            "percent": round(done * 100 / len(all_tasks)) if all_tasks else 0
+        }
+        
+        status = self.request.GET.get("status", "open")
+        if status == "open":
+            shown = [task for task in all_tasks if not task.is_done]
+        elif status == "done":
+            shown = [task for task in all_tasks if task.is_done]
+        else:
+            shown = all_tasks
+        groups = [
+            {"milestone": milestone, "tasks": [t for t in shown if t.milestone_id == milestone.pk], "task_count": milestone.task_count, "done_count": milestone.done_count} for milestone in milestones
+        ]
+        unassigned = [t for t in all_tasks if t.milestone_id is None]
+        groups.append({
+            "milestone": None,
+            "tasks": [t for t in shown if t.milestone_id is None],
+            "task_count": len(unassigned),
+            "done_count": sum(1 for t in unassigned if t.is_done)            
+        })
+        
+        context.update({
+            "tab": self.request.GET.get("tab", "overview"),
+            "status": status,
+            "milestones": milestones,
+            "groups": groups
+        })
         return context
+        
     
 class ProjectStatusView(RuleRequiredMixin, View):
     
@@ -319,3 +358,25 @@ class TaskDeleteView(RuleRequiredMixin, View):
         task.delete()
         messages.success(request, f"Task “{task.title}” deleted.")
         return redirect(f"{reverse('project_detail', args=[project.pk])}?tab=tasks")
+    
+class TaskToggleView(LoginRequiredMixin, View):
+    
+    http_method_names = ["post"]
+    
+    def post(self, request, pk):
+        task = get_object_or_404(Task.objects.select_related("project"), pk = pk)
+        refused = refuse_if_read_only(request, task.project)
+        if refused:
+            return refused
+        if not task.can_be_ticked_by(request.user):
+            raise PermissionDenied
+        if task.is_done:
+            task.reopen()
+            messages.success(request, f"{task.title} reopened.")
+        else:
+            task.mark_done()
+            messages.success(request, f"{task.title} marked done.")
+        next_url = request.POST.get("next", "")
+        if url_has_allowed_host_and_scheme(next_url, allowed_hosts = {request.get_host()}):
+            return redirect(next_url)
+        return redirect(f"{reverse('project_detail', args = [task.project.pk])}?tab=tasks")

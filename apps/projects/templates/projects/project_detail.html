@@ -56,11 +56,30 @@
   </div>
 </div>
 
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link{% if tab == 'overview' %} active{% endif %}" href="?tab=overview">Overview</a></li>
+  <li class="nav-item"><a class="nav-link{% if tab == 'tasks' %} active{% endif %}" href="?tab=tasks">Tasks <span class="badge ms-1">{{ progress.total }}</span></a></li>
+</ul>
+
+{% if tab == "tasks" %}
+  {% include "partials/_task_tab.html" %}
+{% else %}
 <div class="row row-cards">
   <div class="col-lg-8">
-    <div class="card">
+    <div class="card mb-3">
       <div class="card-header"><h3 class="card-title">Progress</h3></div>
-      <div class="card-body text-secondary">No tasks yet.</div>
+      <div class="card-body">
+        {% if progress.total %}
+          <div class="d-flex justify-content-between small mb-1">
+            <span>{{ progress.done }} of {{ progress.total }} tasks done</span><strong>{{ progress.percent }}%</strong>
+          </div>
+          <div class="progress" role="progressbar" aria-valuenow="{{ progress.percent }}" aria-valuemin="0" aria-valuemax="100" aria-label="Tasks done">
+            <div class="progress-bar" style="width: {{ progress.percent }}%"></div>
+          </div>
+        {% else %}
+          <span class="text-secondary">No tasks yet.</span>
+        {% endif %}
+      </div>
     </div>
 
     <div class="card">
@@ -165,6 +184,9 @@
     </div>
   </div>
 </div>
+{% endif %}
+
+
 {% if user.can_edit_project_data %}
   {% for option in project.status_options %}
     {% if option.confirmation %}

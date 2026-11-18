@@ -112,7 +112,7 @@ class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
                     parts.append(f"{tasks_outside} task{'s' if tasks_outside != 1 else ''}")
                 if milestones_outside:
                     parts.append(f"{milestones_outside} milestone{'s' if milestones_outside != 1 else ''}")
-                self.add_error("start_date", f"{' and '.join(parts)} fall outside these dates. Move them first.")
+                self.add_error("start_date", f"{' and '.join(parts)} falls outside these dates. Move them first.")
         return cleaned
     
     def save_members(self, project):

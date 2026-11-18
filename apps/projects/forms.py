@@ -102,6 +102,17 @@ class ProjectDetailsForm(TablerFormMixin, forms.ModelForm):
         start, end = cleaned.get("start_date"), cleaned.get("target_end_date")
         if start and end and end < start:
             self.add_error("target_end_date", "Target end date must be on or after the start date.")
+            
+        if self.instance.pk and start and end and end >= start:
+            tasks_outside = self.instance.tasks.filter(Q(start_date__lt = start) | Q(due_date__gt = end)).count()
+            milestones_outside = self.instance.milestones.filter(Q(due_date__lt = start) | Q(due_date__gt = end)).count()
+            if tasks_outside or milestones_outside:
+                parts = []
+                if tasks_outside:
+                    parts.append(f"{tasks_outside} task{'s' if tasks_outside != 1 else ''}")
+                if milestones_outside:
+                    parts.append(f"{milestones_outside} milestone{'s' if milestones_outside != 1 else ''}")
+                self.add_error("start_date", f"{' and '.join(parts)} fall outside these dates. Move them first.")
         return cleaned
     
     def save_members(self, project):

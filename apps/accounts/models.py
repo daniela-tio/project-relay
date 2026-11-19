@@ -30,6 +30,9 @@ class User(AbstractUser):
     def save(self, *args, **kwargs):
         self.username = self.normalize_username(self.username)
         super().save(*args, **kwargs)
+        
+    def __str___(self):
+        return self.get_full_name() or self.username
     
     # Role checks
     @property

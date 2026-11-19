@@ -1,0 +1,30 @@
+<tr>
+  <td class="w-1">
+    {% if not project.is_read_only and user.can_edit_project_data or not project.is_read_only and user in task.assignees.all %}
+      <form method="post" action="{% url 'task_toggle' task.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="btn btn-icon btn-sm{% if task.is_done %} btn-success{% endif %}"
+                aria-label="{% if task.is_done %}Reopen{% else %}Mark done{% endif %} {{ task.title }}">{% if task.is_done %}✓{% else %}○{% endif %}</button>
+      </form>
+    {% endif %}
+  </td>
+  <td>
+    {% if user.can_edit_project_data and not project.is_read_only %}
+      <a href="{% url 'task_update' task.pk %}"{% if task.is_done %} class="text-decoration-line-through text-secondary"{% endif %}>{{ task.title }}</a>
+    {% else %}
+      <span{% if task.is_done %} class="text-decoration-line-through text-secondary"{% endif %}>{{ task.title }}</span>
+    {% endif %}
+    <div class="small text-secondary">{{ task.school.name|default:"Trust-wide" }}</div>
+  </td>
+  <td class="small">
+    {% for person in task.assignees.all %}{{ person }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="text-secondary">Unassigned</span>{% endfor %}
+  </td>
+  <td class="small">
+    Due {{ task.due_date|date:"D j M" }}
+    {% if not task.is_done and task.due_date < today %}<span class="badge bg-red-lt ms-1">Overdue</span>{% endif %}
+  </td>
+  <td>
+    {% if task.priority == 3 %}<span class="badge bg-orange-lt">High</span>{% elif task.priority == 1 %}<span class="badge bg-secondary-lt">Low</span>{% endif %}
+  </td>
+</tr>

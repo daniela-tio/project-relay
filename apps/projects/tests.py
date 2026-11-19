@@ -1,12 +1,13 @@
-from datetime import date
+from datetime import date, timedelta
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from apps.portfolio.gias import run_import
 from apps.portfolio.models import School, Trust
 from apps.portfolio.tests import OPEN_ACADEMY, make_gias_csv
-from apps.projects.models import Project, ProjectSchool, ProjectMember
+from apps.projects.models import Project, ProjectSchool, ProjectMember, Milestone, Task, ChecklistItem
 
 def dfe(row):
     return row["LA (code)"] + row["EstablishmentNumber"]
@@ -404,3 +405,270 @@ class ProjectTeamTests(TestCase):
     def test_project_page_says_when_there_is_no_team(self):
         response = self.client.get(reverse("project_detail", args = [self.project.pk]))
         self.assertContains(response, "No techs yet")
+        
+class MilestoneTests(TestCase):
+    
+    def setUp(self):
+        User = get_user_model()
+        self.pm = User.objects.create_user(
+            "pm17", email="pm17@test.com", password="Curve-Outlet-1", role=User.Role.PROJECT_MANAGER
+        )
+        self.tech = User.objects.create_user(
+            "tech17", email="tech17@test.com", password="Menu-Source-1", role=User.Role.TECHNICIAN
+        )
+        self.outsider = User.objects.create_user(
+            "tech18", email="tech18@test.com", password="Battery-Cycle-1", role=User.Role.TECHNICIAN
+        )
+        self.school = School.objects.create(name="Beacon High", dfe_number="8874005")
+        self.project = Project.objects.create(
+            name="Wi-Fi Refresh", scope=Project.Scope.SCHOOL, pm=self.pm,
+            start_date=date(2027, 1, 4), target_end_date=date(2027, 3, 31),
+        )
+        ProjectSchool.objects.create(project=self.project, school=self.school)
+        ProjectMember.objects.create(project=self.project, user=self.tech, role=ProjectMember.Role.TECH)
+        self.milestone = Milestone.objects.create(project=self.project, name="Install", due_date=date(2027, 2, 26))
+        self.client.force_login(self.pm)
+
+    def make_task(self, **changes):
+        fields = {"project": self.project, "school": self.school, "title": "Mount APs",
+                  "start_date": date(2027, 1, 11), "due_date": date(2027, 1, 15),
+                  "where": Task.Where.REMOTE}
+        fields.update(changes)
+        return Task.objects.create(**fields)
+    
+    def add(self, **data):
+        return self.client.post(reverse("milestone_create", args=[self.project.pk]),
+                                {"name": "Handover", "due_date": "2027-03-26", **data})
+
+    def test_pm_can_add_a_milestone(self):
+        self.add()
+        self.assertTrue(self.project.milestones.filter(name="Handover").exists())
+
+    def test_technicians_cannot_add_milestones(self):
+        self.client.force_login(self.tech)
+        self.assertEqual(self.add().status_code, 403)
+
+    def test_due_date_must_be_within_the_project(self):
+        response = self.add(due_date="2027-05-01")
+        self.assertIn("Milestone dates must fall within the project", response.context["form"].errors["due_date"][0])
+
+    def test_duplicate_name_is_refused_whatever_the_case(self):
+        response = self.add(name="INSTALL")
+        self.assertIn(f"already exists", response.context["form"].errors["name"][0])
+
+    def test_ticking_completes_and_unticking_reopens(self):
+        url = reverse("milestone_toggle", args=[self.milestone.pk])
+        self.client.post(url)
+        self.milestone.refresh_from_db()
+        self.assertEqual((self.milestone.status, self.milestone.completed_by), ("done", self.pm))
+        self.client.post(url)
+        self.milestone.refresh_from_db()
+        self.assertIsNone(self.milestone.completed_at)
+
+    def test_deleting_a_milestone_keeps_its_tasks(self):
+        task = self.make_task(milestone=self.milestone)
+        self.client.post(reverse("milestone_delete", args=[self.milestone.pk]))
+        task.refresh_from_db()
+        self.assertIsNone(task.milestone)
+
+    def test_status_is_worked_out_from_dates(self):
+        today = timezone.localdate()
+        self.assertEqual(Milestone(due_date=today + timedelta(days=1)).status, "open")
+        self.assertEqual(Milestone(due_date=today - timedelta(days=1)).status, "overdue")
+        self.assertEqual(Milestone(due_date=today, completed_at=timezone.now()).status, "done")
+
+    def test_closed_project_refuses_new_milestones(self):
+        self.project.status = Project.Status.CANCELLED
+        self.project.save()
+        response = self.add()
+        self.assertRedirects(response, reverse("project_detail", args=[self.project.pk]))
+        self.assertFalse(self.project.milestones.filter(name="Handover").exists())
+        
+class TaskFormTests(TestCase):
+    
+    def setUp(self):
+        User = get_user_model()
+        self.pm = User.objects.create_user(
+            "pm18", email="pm17@test.com", password="Cave-Doctor-1", role=User.Role.PROJECT_MANAGER
+        )
+        self.tech = User.objects.create_user(
+            "tech18", email="tech17@test.com", password="Step-Lamp-1", role=User.Role.TECHNICIAN
+        )
+        self.outsider = User.objects.create_user(
+            "tech19", email="tech18@test.com", password="Vison-Mold-1", role=User.Role.TECHNICIAN
+        )
+        self.school = School.objects.create(name="Beacon High", dfe_number="8874005")
+        self.project = Project.objects.create(
+            name="Wi-Fi Refresh", scope=Project.Scope.SCHOOL, pm=self.pm,
+            start_date=date(2027, 1, 4), target_end_date=date(2027, 3, 31),
+        )
+        ProjectSchool.objects.create(project=self.project, school=self.school)
+        ProjectMember.objects.create(project=self.project, user=self.tech, role=ProjectMember.Role.TECH)
+        self.milestone = Milestone.objects.create(project=self.project, name="Install", due_date=date(2027, 2, 26))
+        self.client.force_login(self.pm)
+
+    def make_task(self, **changes):
+        fields = {"project": self.project, "school": self.school, "title": "Mount APs",
+                  "start_date": date(2027, 1, 11), "due_date": date(2027, 1, 15),
+                  "where": Task.Where.REMOTE}
+        fields.update(changes)
+        return Task.objects.create(**fields)
+    
+    def task_data(self, checklist=(), **changes):
+        data = {
+            "school": self.school.pk, "milestone": self.milestone.pk, "title": "Mount APs",
+            "priority": Task.Priority.NORMAL, "start_date": "2027-01-11", "due_date": "2027-01-15",
+            "where": Task.Where.REMOTE, "assignees": [self.tech.pk],
+            "checklist_items-TOTAL_FORMS": "3", "checklist_items-INITIAL_FORMS": "0",
+            "checklist_items-MIN_NUM_FORMS": "0", "checklist_items-MAX_NUM_FORMS": "1000",
+        }
+        for index, text in enumerate(checklist):
+            data[f"checklist_items-{index}-text"] = text
+        data.update(changes)
+        return data
+
+    def create(self, **kwargs):
+        return self.client.post(reverse("task_create", args=[self.project.pk]), self.task_data(**kwargs))
+
+    def errors(self, response):
+        return response.context["form"].errors
+
+    def test_task_is_created_with_assignees_and_checklist(self):
+        response = self.create(checklist=["Label leads", "Test ports"])
+        task = Task.objects.get()
+        self.assertRedirects(response, f"{reverse('project_detail', args=[self.project.pk])}?tab=tasks")
+        self.assertEqual(list(task.assignees.all()), [self.tech])
+        self.assertEqual([item.text for item in task.checklist_items.all()], ["Label leads", "Test ports"])
+
+    def test_blank_checklist_rows_are_ignored(self):
+        self.create(checklist=["Only one"])
+        self.assertEqual(ChecklistItem.objects.count(), 1)
+
+    def test_dates_must_be_within_the_project_and_in_order(self):
+        self.assertIn("start_date", self.errors(self.create(start_date="2026-12-01")))
+        self.assertIn("due_date", self.errors(self.create(start_date="2027-01-15", due_date="2027-01-11")))
+
+    def test_times_are_both_or_neither_and_in_order(self):
+        self.assertIn("end_time", self.errors(self.create(start_time="09:00")))
+        self.assertIn("end_time", self.errors(self.create(start_time="13:00", end_time="12:00")))
+
+    def test_on_site_needs_a_location(self):
+        self.assertIn("location", self.errors(self.create(where=Task.Where.ON_SITE)))
+
+    def test_only_this_projects_choices_are_accepted(self):
+        other_school = School.objects.create(name="Elsewhere", dfe_number="8870001")
+        self.assertIn("school", self.errors(self.create(school=other_school.pk)))
+        self.assertIn("assignees", self.errors(self.create(assignees=[self.outsider.pk])))
+        self.assertFalse(Task.objects.exists())
+
+    def test_editing_can_remove_a_checklist_item(self):
+        task = self.make_task()
+        item = ChecklistItem.objects.create(task=task, text="Old item")
+        data = self.task_data(**{
+            "checklist_items-TOTAL_FORMS": "1", "checklist_items-INITIAL_FORMS": "1",
+            "checklist_items-0-id": item.pk, "checklist_items-0-text": "Old item",
+            "checklist_items-0-DELETE": "on",
+        })
+        self.client.post(reverse("task_update", args=[task.pk]), data)
+        self.assertFalse(task.checklist_items.exists())
+
+    def test_task_can_be_deleted(self):
+        task = self.make_task()
+        self.client.post(reverse("task_delete", args=[task.pk]))
+        self.assertFalse(Task.objects.exists())
+
+    def test_technicians_cannot_open_the_task_form(self):
+        self.client.force_login(self.tech)
+        self.assertEqual(self.client.get(reverse("task_create", args=[self.project.pk])).status_code, 403)
+        
+class TaskProgressTests(TestCase):
+    
+    def setUp(self):
+        User = get_user_model()
+        self.pm = User.objects.create_user(
+            "pm19", email="pm17@test.com", password="Matter-Maid-1", role=User.Role.PROJECT_MANAGER
+        )
+        self.tech = User.objects.create_user(
+            "tech20", email="tech17@test.com", password="Lick-Match-1", role=User.Role.TECHNICIAN
+        )
+        self.outsider = User.objects.create_user(
+            "tech21", email="tech18@test.com", password="Curtain-Sail-1", role=User.Role.TECHNICIAN
+        )
+        self.school = School.objects.create(name="Beacon High", dfe_number="8874005")
+        self.project = Project.objects.create(
+            name="Wi-Fi Refresh", scope=Project.Scope.SCHOOL, pm=self.pm,
+            start_date=date(2027, 1, 4), target_end_date=date(2027, 3, 31),
+        )
+        ProjectSchool.objects.create(project=self.project, school=self.school)
+        ProjectMember.objects.create(project=self.project, user=self.tech, role=ProjectMember.Role.TECH)
+        self.milestone = Milestone.objects.create(project=self.project, name="Install", due_date=date(2027, 2, 26))
+        self.client.force_login(self.pm)
+
+    def make_task(self, **changes):
+        fields = {"project": self.project, "school": self.school, "title": "Mount APs",
+                  "start_date": date(2027, 1, 11), "due_date": date(2027, 1, 15),
+                  "where": Task.Where.REMOTE}
+        fields.update(changes)
+        return Task.objects.create(**fields)
+    
+    def toggle(self, task, **data):
+        return self.client.post(reverse("task_toggle", args=[task.pk]), data)
+
+    def test_ticking_marks_done_and_unticking_reopens(self):
+        task = self.make_task()
+        self.toggle(task)
+        task.refresh_from_db()
+        self.assertTrue(task.is_done)
+        self.assertIsNotNone(task.completed_at)
+        self.toggle(task)
+        task.refresh_from_db()
+        self.assertEqual((task.status, task.completed_at), (Task.Status.TO_DO, None))
+
+    def test_assigned_tech_can_tick_but_others_cannot(self):
+        task = self.make_task()
+        task.assignees.add(self.tech)
+        self.client.force_login(self.tech)
+        self.toggle(task)
+        task.refresh_from_db()
+        self.assertTrue(task.is_done)
+        self.client.force_login(self.outsider)
+        self.assertEqual(self.toggle(task).status_code, 403)
+
+    def test_tick_returns_to_the_page_it_came_from_but_not_other_sites(self):
+        task = self.make_task()
+        here = f"{reverse('project_detail', args=[self.project.pk])}?tab=tasks&status=all"
+        self.assertRedirects(self.toggle(task, next=here), here)
+        response = self.toggle(task, next="https://evil.example/")
+        self.assertEqual(response.url, f"{reverse('project_detail', args=[self.project.pk])}?tab=tasks")
+
+    def test_progress_counts_done_tasks(self):
+        self.make_task().mark_done()
+        self.make_task()
+        progress = self.client.get(reverse("project_detail", args=[self.project.pk])).context["progress"]
+        self.assertEqual(progress, {"done": 1, "total": 2, "percent": 50})
+
+    def test_tasks_are_grouped_by_milestone_with_no_milestone_last(self):
+        self.make_task(milestone=self.milestone, title="In milestone")
+        self.make_task(title="Loose")
+        groups = self.client.get(
+            reverse("project_detail", args=[self.project.pk]), {"tab": "tasks"}
+        ).context["groups"]
+        self.assertEqual([g["milestone"] for g in groups], [self.milestone, None])
+        self.assertEqual([t.title for t in groups[1]["tasks"]], ["Loose"])
+
+    def test_open_filter_hides_done_tasks(self):
+        self.make_task(title="Finished").mark_done()
+        self.make_task(title="Still open")
+        groups = self.client.get(
+            reverse("project_detail", args=[self.project.pk]), {"tab": "tasks", "status": "open"}
+        ).context["groups"]
+        shown = [t.title for g in groups for t in g["tasks"]]
+        self.assertEqual(shown, ["Still open"])
+
+    def test_project_dates_cannot_leave_tasks_outside(self):
+        self.make_task(due_date=date(2027, 3, 20))
+        response = self.client.post(reverse("project_update", args=[self.project.pk]), {
+            "name": "Wi-Fi Refresh", "start_date": "2027-01-04", "target_end_date": "2027-03-01", "pm": self.pm.pk,
+        })
+        self.assertIn("1 task falls outside", response.context["form"].errors["start_date"][0])
+        

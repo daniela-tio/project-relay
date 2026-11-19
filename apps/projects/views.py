@@ -3,16 +3,24 @@ from django.urls import reverse
 from django.views.generic import FormView, CreateView, UpdateView, DetailView, View 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Count, Q
 from django.contrib.messages.views import SuccessMessageMixin
+from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from urllib.parse import urlencode
 from apps.accounts.permissions import RuleRequiredMixin
 from apps.portfolio.services import SchoolLookupError, find_school_for_project
-from apps.projects.forms import ProjectCustomerForm, ProjectForm, ProjectEditForm
-from apps.projects.models import Project, ProjectSchool, Trust
+from apps.projects.forms import ProjectCustomerForm, ProjectForm, ProjectEditForm, MilestoneForm, TaskForm, ChecklistFormSet
+from apps.projects.models import Project, ProjectSchool, Trust, Milestone, Task, ChecklistItem
 from apps.projects.services import ProjectCustomer
 
-
+def refuse_if_read_only(request, project):
+    if project.is_read_only:
+        messages.error(request, "This project is closed. Reopen to make changes")
+        return redirect("project_detail", pk = project.pk)
+    return None
 
 class ProjectCustomerView(RuleRequiredMixin, FormView):
     permission_rule = "can_edit_project_data"
@@ -93,6 +101,51 @@ class ProjectDetailView(LoginRequiredMixin, DetailView):
     def get_queryset(self):
         return Project.objects.select_related("trust", "pm").prefetch_related("schools", "members__user")
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project = self.object
+        milestones = list(project.milestones.annotate(
+            task_count = Count("tasks"),
+            done_count = Count("tasks", filter = Q(tasks__status = Task.Status.DONE))
+        ))
+        all_tasks = list(
+            project.tasks.select_related("school", "milestone").prefetch_related("assignees")
+        )
+        
+        done = sum(1 for task in all_tasks if task.is_done)
+        context["progress"] = {
+            "done": done,
+            "total": len(all_tasks),
+            "percent": round(done * 100 / len(all_tasks)) if all_tasks else 0
+        }
+        
+        status = self.request.GET.get("status", "open")
+        if status == "open":
+            shown = [task for task in all_tasks if not task.is_done]
+        elif status == "done":
+            shown = [task for task in all_tasks if task.is_done]
+        else:
+            shown = all_tasks
+        groups = [
+            {"milestone": milestone, "tasks": [t for t in shown if t.milestone_id == milestone.pk], "task_count": milestone.task_count, "done_count": milestone.done_count} for milestone in milestones
+        ]
+        unassigned = [t for t in all_tasks if t.milestone_id is None]
+        groups.append({
+            "milestone": None,
+            "tasks": [t for t in shown if t.milestone_id is None],
+            "task_count": len(unassigned),
+            "done_count": sum(1 for t in unassigned if t.is_done)            
+        })
+        
+        context.update({
+            "tab": self.request.GET.get("tab", "overview"),
+            "status": status,
+            "milestones": milestones,
+            "groups": groups
+        })
+        return context
+        
+    
 class ProjectStatusView(RuleRequiredMixin, View):
     
     permission_rule = "can_edit_project_data"
@@ -138,3 +191,192 @@ class ProjectUpdateView(RuleRequiredMixin, SuccessMessageMixin, UpdateView):
         response = super().form_valid(form)
         form.save_members(self.object)
         return response
+    
+class MilestoneFormMixin(RuleRequiredMixin):
+    
+    permission_rule = "can_edit_project_data"
+    model = Milestone
+    form_class = MilestoneForm
+    template_name = "projects/milestone_form.html"
+    
+    def get(self, request, *args, **kwargs):
+        return refuse_if_read_only(request, self.get_project()) or super().get(request, *args, **kwargs)
+    
+    def post(self, request, *args, **kwargs):
+        return refuse_if_read_only(request, self.get_project()) or super().post(request, *args, **kwargs)
+    
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["project"] = self.get_project()
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["project"] = self.get_project()
+        return context
+
+    def get_success_url(self):
+        return reverse("project_detail", args=[self.get_project().pk])
+
+class MilestoneCreateView(MilestoneFormMixin, CreateView):
+    def get_project(self):
+        return get_object_or_404(Project, pk=self.kwargs["project_pk"])
+
+    def form_valid(self, form):
+        form.instance.project = self.get_project()
+        messages.success(self.request, "Milestone added.")
+        return super().form_valid(form)
+
+class MilestoneUpdateView(MilestoneFormMixin, UpdateView):
+    def get_project(self):
+        return self.get_object().project
+
+    def form_valid(self, form):
+        messages.success(self.request, "Milestone updated.")
+        return super().form_valid(form)
+
+class MilestoneDeleteView(RuleRequiredMixin, View):
+
+    permission_rule = "can_edit_project_data"
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        milestone = get_object_or_404(Milestone, pk=pk)
+        project = milestone.project
+        refused = refuse_if_read_only(request, project)
+        if refused:
+            return refused
+        milestone.delete()
+        messages.success(request, f"Milestone “{milestone.name}” deleted.")
+        return redirect("project_detail", pk=project.pk)
+
+class MilestoneToggleView(RuleRequiredMixin, View):
+
+    permission_rule = "can_edit_project_data"
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        milestone = get_object_or_404(Milestone, pk=pk)
+        refused = refuse_if_read_only(request, milestone.project)
+        if refused:
+            return refused
+        if milestone.completed_at:
+            milestone.completed_at = None
+            milestone.completed_by = None
+            messages.success(request, f"Milestone “{milestone.name}” reopened.")
+        else:
+            milestone.completed_at = timezone.now()
+            milestone.completed_by = request.user
+            messages.success(request, f"Milestone “{milestone.name}” completed.")
+        milestone.save()
+        return redirect("project_detail", pk=milestone.project.pk)
+    
+class TaskFormMixin(RuleRequiredMixin):
+    """Shared by creating and editing a task: the form plus its checklist, saved together."""
+
+    permission_rule = "can_edit_project_data"
+    model = Task
+    form_class = TaskForm
+    template_name = "projects/task_form.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["project"] = self.get_project()
+        return kwargs
+
+    def get(self, request, *args, **kwargs):
+        return refuse_if_read_only(request, self.get_project()) or super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        refused = refuse_if_read_only(request, self.get_project())
+        if refused:
+            return refused
+        self.object = self.get_existing_task()
+        form = self.get_form()
+        checklist = ChecklistFormSet(request.POST, instance=self.object or Task())
+        if form.is_valid() and checklist.is_valid():
+            return self.save_task(form, checklist)
+        return self.render_to_response(self.get_context_data(form=form, checklist=checklist))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["project"] = self.get_project()
+        context.setdefault("checklist", ChecklistFormSet(instance=self.object or Task()))
+        return context
+
+    @transaction.atomic
+    def save_task(self, form, checklist):
+        task = form.save(commit=False)
+        task.project = self.get_project()
+        task.save()
+        form.save_m2m()  # saves the assignees, which need the task to exist first
+        checklist.instance = task
+        checklist.save()
+        messages.success(self.request, self.success_text)
+        return redirect(f"{reverse('project_detail', args=[task.project.pk])}?tab=tasks")
+
+
+class TaskCreateView(TaskFormMixin, CreateView):
+    success_text = "Task created."
+
+    def get_project(self):
+        return get_object_or_404(Project, pk=self.kwargs["project_pk"])
+
+    def get_existing_task(self):
+        return None
+
+    def get_initial(self):
+        # "Add task to {milestone}" (C8) pre-selects that milestone
+        initial = super().get_initial()
+        if self.request.GET.get("milestone"):
+            initial["milestone"] = self.request.GET["milestone"]
+        return initial
+
+
+class TaskUpdateView(TaskFormMixin, UpdateView):
+    success_text = "Task updated."
+
+    def get_project(self):
+        return self.get_object().project
+
+    def get_existing_task(self):
+        return self.get_object()
+
+
+class TaskDeleteView(RuleRequiredMixin, View):
+    """Delete a task. POST only, from its confirmation modal."""
+
+    permission_rule = "can_edit_project_data"
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        task = get_object_or_404(Task, pk=pk)
+        project = task.project
+        refused = refuse_if_read_only(request, project)
+        if refused:
+            return refused
+        task.delete()
+        messages.success(request, f"Task “{task.title}” deleted.")
+        return redirect(f"{reverse('project_detail', args=[project.pk])}?tab=tasks")
+    
+class TaskToggleView(LoginRequiredMixin, View):
+    
+    http_method_names = ["post"]
+    
+    def post(self, request, pk):
+        task = get_object_or_404(Task.objects.select_related("project"), pk = pk)
+        refused = refuse_if_read_only(request, task.project)
+        if refused:
+            return refused
+        if not task.can_be_ticked_by(request.user):
+            raise PermissionDenied
+        if task.is_done:
+            task.reopen()
+            messages.success(request, f"{task.title} reopened.")
+        else:
+            task.mark_done()
+            messages.success(request, f"{task.title} marked done.")
+        next_url = request.POST.get("next", "")
+        if url_has_allowed_host_and_scheme(next_url, allowed_hosts = {request.get_host()}):
+            return redirect(next_url)
+        return redirect(f"{reverse('project_detail', args = [task.project.pk])}?tab=tasks")
